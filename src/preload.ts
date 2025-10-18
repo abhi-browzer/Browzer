@@ -101,6 +101,11 @@ export interface BrowserAPI {
   getAutomationStatus: () => Promise<any>;
   cancelAutomation: () => Promise<{ success: boolean }>;
 
+  // Context Extraction
+  extractBrowserContext: (options?: any) => Promise<any>;
+  extractBrowserContextForTab: (tabId: string, options?: any) => Promise<any>;
+  extractAndDownloadContext: (options?: any) => Promise<{ success: boolean; filePath?: string; error?: string }>;
+
   // Event listeners
   onTabsUpdated: (callback: (data: { tabs: TabInfo[]; activeTabId: string | null }) => void) => () => void;
   onRecordingAction: (callback: (action: any) => void) => () => void;
@@ -269,6 +274,14 @@ const browserAPI: BrowserAPI = {
     ipcRenderer.on('automation:progress', subscription);
     return () => ipcRenderer.removeListener('automation:progress', subscription);
   },
+
+  // Context Extraction API
+  extractBrowserContext: (options?: any) => 
+    ipcRenderer.invoke('context:extract', options),
+  extractBrowserContextForTab: (tabId: string, options?: any) => 
+    ipcRenderer.invoke('context:extract-for-tab', tabId, options),
+  extractAndDownloadContext: (options?: any) => 
+    ipcRenderer.invoke('context:extract-and-download', options),
 };
 
 contextBridge.exposeInMainWorld('browserAPI', browserAPI);

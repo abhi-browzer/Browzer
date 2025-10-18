@@ -1,5 +1,5 @@
 import { useState, useEffect, KeyboardEvent } from 'react';
-import { ArrowLeft, ArrowRight, RotateCw, X, Lock, Globe, Circle, Square, Settings, Clock, User, MoreVertical, Video, ChevronRight, ChevronLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, RotateCw, X, Lock, Globe, Circle, Square, Settings, Clock, User, MoreVertical, Video, ChevronRight, ChevronLeft, Loader2, Download } from 'lucide-react';
 import type { TabInfo } from '@/shared/types';
 import { cn } from '@/renderer/lib/utils';
 import { useSidebarStore } from '@/renderer/store/useSidebarStore';
@@ -36,6 +36,7 @@ export function NavigationBar({
   const [isEditing, setIsEditing] = useState(false);
   const { isVisible: isSidebarVisible, toggleSidebar } = useSidebarStore();
   const { isRecording, isLoading, toggleRecording } = useRecording();
+  const [isExtractingContext, setIsExtractingContext] = useState(false);
 
   // Update URL input when active tab changes
   useEffect(() => {
@@ -53,6 +54,29 @@ export function NavigationBar({
       setUrlInput(activeTab?.url || '');
       setIsEditing(false);
       (e.target as HTMLInputElement).blur();
+    }
+  };
+
+  const handleExtractContext = async () => {
+    setIsExtractingContext(true);
+    try {
+      const result = await window.browserAPI.extractAndDownloadContext({
+        includeDOM: true,
+        maxInteractiveElements: 100,
+      });
+
+      if (result.success && result.filePath) {
+        console.log('✅ Context extracted successfully:', result.filePath);
+        alert(`Context extracted successfully!\n\nSaved to:\n${result.filePath}`);
+      } else {
+        console.error('❌ Context extraction failed:', result.error);
+        alert(`Context extraction failed:\n${result.error}`);
+      }
+    } catch (error) {
+      console.error('❌ Context extraction error:', error);
+      alert(`Context extraction error:\n${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsExtractingContext(false);
     }
   };
 
@@ -168,6 +192,18 @@ export function NavigationBar({
           <DropdownMenuItem onClick={() => onNavigate('browzer://history')}>
             <Clock className="w-4 h-4 mr-2" />
             History
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem 
+            onClick={handleExtractContext}
+            disabled={isExtractingContext || !activeTab}
+          >
+            {isExtractingContext ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4 mr-2" />
+            )}
+            {isExtractingContext ? 'Extracting...' : 'Quick Extract'}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => onNavigate('browzer://profile')}>

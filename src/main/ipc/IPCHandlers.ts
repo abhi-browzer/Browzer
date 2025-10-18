@@ -44,6 +44,7 @@ export class IPCHandlers {
     this.setupPasswordHandlers();
     this.setupWindowHandlers();
     this.setupAutomationHandlers();
+    this.setupContextHandlers();
   }
 
   private setupTabHandlers(): void {
@@ -457,6 +458,11 @@ export class IPCHandlers {
     ipcMain.removeAllListeners('automation:generate-plan');
     ipcMain.removeAllListeners('automation:get-status');
     ipcMain.removeAllListeners('automation:cancel');
+    
+    // Context handlers cleanup
+    ipcMain.removeAllListeners('context:extract');
+    ipcMain.removeAllListeners('context:extract-for-tab');
+    ipcMain.removeAllListeners('context:extract-and-download');
   }
 
   private setupPasswordHandlers(): void {
@@ -489,6 +495,23 @@ export class IPCHandlers {
     // Check if blacklisted
     ipcMain.handle('password:is-blacklisted', async (_, origin: string) => {
       return this.passwordManager.isBlacklisted(origin);
+    });
+  }
+
+  private setupContextHandlers(): void {
+    // Extract browser context from active tab
+    ipcMain.handle('context:extract', async (_, options?: any) => {
+      return await this.browserManager.extractBrowserContext(options);
+    });
+
+    // Extract browser context from specific tab
+    ipcMain.handle('context:extract-for-tab', async (_, tabId: string, options?: any) => {
+      return await this.browserManager.extractBrowserContextForTab(tabId, options);
+    });
+
+    // Extract and download context as JSON
+    ipcMain.handle('context:extract-and-download', async (_, options?: any) => {
+      return await this.browserManager.extractAndDownloadContext(options);
     });
   }
 }
