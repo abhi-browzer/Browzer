@@ -1017,10 +1017,6 @@ export class ActionRecorder {
       verificationDeadline
     });
     
-    console.log('⏳ Action pending verification:', actionData);
-    if(actionData.target.selectors){
-      console.log("sectors: ", actionData.target.selectors)
-    }
     setTimeout(async () => {
       await this.verifyAndFinalizeAction(actionId);
     }, 500);
@@ -1053,14 +1049,6 @@ export class ActionRecorder {
     }
     
     this.actions.push(verifiedAction);
-    console.log('✅ Action verified:', verifiedAction.type);
-    console.log('📊 Effects:', effects.summary || 'none');
-    if(effects.network){
-      console.log('   Network:', effects.network);
-    }
-    if(effects.navigation){
-      console.log('   Navigation:', effects.navigation);
-    }
     if (this.onActionCallback) {
       this.onActionCallback(verifiedAction);
     }
@@ -1253,7 +1241,6 @@ export class ActionRecorder {
     };
 
     this.actions.push(action);
-    console.log('🧭 Navigation recorded:', action);
     if (this.onActionCallback) {
       this.onActionCallback(action);
     }
