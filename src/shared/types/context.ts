@@ -41,6 +41,17 @@ export interface InteractiveElement {
 }
 
 /**
+ * Form field information (extends InteractiveElement)
+ */
+export interface FormField {
+    name: string;
+    type: string;
+    label?: string;
+    required: boolean;
+    selector: string;
+}
+
+/**
  * DOM structure with semantic annotations
  */
 export interface DOMContext {
@@ -48,13 +59,7 @@ export interface DOMContext {
     action?: string;
     method?: string;
     selector: string;
-    fields: Array<{
-      name: string;
-      type: string;
-      label?: string;
-      required: boolean;
-      selector: string;
-    }>;
+    fields: FormField[];
   }>;
   
   // All interactive elements combined
@@ -65,9 +70,6 @@ export interface DOMContext {
     totalElements: number;
     interactiveElements: number;
     forms: number;
-    links: number;
-    images: number;
-    iframes: number;
   };
 }
 

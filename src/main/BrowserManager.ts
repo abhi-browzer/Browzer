@@ -7,7 +7,7 @@ import { RecordedAction, RecordingSession, HistoryTransition, RecordingTabInfo, 
 import { INTERNAL_PAGES } from '@/main/constants';
 import { stat, writeFile } from 'fs/promises';
 import { PasswordUtil } from '@/main/utils/PasswordUtil';
-import { BrowserAutomation, PasswordAutomation } from './automation';
+import { PasswordAutomation, BrowserAutomationExecutor } from './automation';
 import { BrowserContextExtractor } from './context';
 
 // Internal tab structure (includes WebContentsView)
@@ -16,8 +16,8 @@ interface Tab {
   view: WebContentsView;
   info: TabInfo;
   videoRecorder?: VideoRecorder;
-  automation?: BrowserAutomation;
   passwordAutomation?: PasswordAutomation;
+  automationExecutor?: BrowserAutomationExecutor;
   // Track selected credential for multi-step flows
   selectedCredentialId?: string;
   selectedCredentialUsername?: string;
@@ -115,14 +115,14 @@ export class BrowserManager {
       view,
       info: tabInfo,
       videoRecorder: new VideoRecorder(view),
-      automation: new BrowserAutomation(view),
       passwordAutomation: new PasswordAutomation(
         view, 
         this.passwordManager, 
         tabId,
-        (tabId: string, credentialId: string, username: string) => this.handleCredentialSelected(tabId, credentialId, username),
-        (tabId: string) => this.handleAutoFillPassword(tabId)
+        this.handleCredentialSelected.bind(this),
+        this.handleAutoFillPassword.bind(this)
       ),
+      automationExecutor: new BrowserAutomationExecutor(view, tabId),
       contextExtractor: new BrowserContextExtractor(view),
     };
 
@@ -888,11 +888,11 @@ export class BrowserManager {
   }
 
   /**
-   * Get automation instance for active tab
+   * Get automation executor for active tab
    */
-  public getActiveAutomation(): BrowserAutomation | null {
+  public getActiveAutomationExecutor(): BrowserAutomationExecutor | null {
     const activeTab = this.tabs.get(this.activeTabId || '');
-    return activeTab?.automation || null;
+    return activeTab?.automationExecutor || null;
   }
 
   /**
@@ -922,17 +922,6 @@ export class BrowserManager {
     });
   }
 
-  /**
-   * Get tab ID for a given webContents
-   */
-  private getTabIdForWebContents(webContents: any): string | null {
-    for (const [tabId, tab] of this.tabs) {
-      if (tab.view.webContents === webContents) {
-        return tabId;
-      }
-    }
-    return null;
-  }
 
   /**
    * Handle credential selection for multi-step flows

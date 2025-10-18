@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { ipcMain, shell } from 'electron';
 import { BrowserManager } from '@/main/BrowserManager';
 import { LayoutManager } from '@/main/window/LayoutManager';
@@ -5,8 +6,8 @@ import { WindowManager } from '@/main/window/WindowManager';
 import { SettingsStore, AppSettings } from '@/main/settings/SettingsStore';
 import { UserService } from '@/main/user/UserService';
 import { PasswordManager } from '@/main/password/PasswordManager';
-import { AutomationService } from '@/main/automation';
-import { RecordedAction, HistoryQuery, LLMAutomationRequest } from '@/shared/types';
+import { RecordedAction, HistoryQuery } from '@/shared/types';
+import { TestAutomation } from '@/main/automation';
 
 /**
  * IPCHandlers - Centralized IPC communication setup
@@ -16,7 +17,6 @@ export class IPCHandlers {
   private settingsStore: SettingsStore;
   private userService: UserService;
   private passwordManager: PasswordManager;
-  private automationService: AutomationService;
 
   constructor(
     private browserManager: BrowserManager,
@@ -27,7 +27,6 @@ export class IPCHandlers {
     this.userService = new UserService();
     // Use the existing PasswordManager from BrowserManager instead of creating a new one
     this.passwordManager = this.browserManager.getPasswordManager();
-    this.automationService = new AutomationService();
     this.setupHandlers();
 
     console.log('IPCHandlers initialized');
@@ -43,8 +42,8 @@ export class IPCHandlers {
     this.setupHistoryHandlers();
     this.setupPasswordHandlers();
     this.setupWindowHandlers();
-    this.setupAutomationHandlers();
     this.setupContextHandlers();
+    this.setupAutomationHandlers();
   }
 
   private setupTabHandlers(): void {
@@ -155,7 +154,7 @@ export class IPCHandlers {
         return `video-file://${encodeURIComponent(videoPath)}`;
       } catch (error) {
         console.error('Failed to get video file URL:', error);
-        throw error;
+        return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
       }
     });
   }
@@ -317,81 +316,6 @@ export class IPCHandlers {
     });
   }
 
-  private setupAutomationHandlers(): void {
-    // Initialize automation service with API key
-    ipcMain.handle('automation:initialize', async (_, apiKey: string) => {
-      try {
-        this.automationService.initialize(apiKey);
-        return { success: true };
-      } catch (error) {
-        console.error('[IPC] Failed to initialize automation:', error);
-        return { success: false, error: (error as Error).message };
-      }
-    });
-
-    // Execute automation
-    ipcMain.handle('automation:execute', async (_, request: LLMAutomationRequest) => {
-      try {
-        const automation = this.browserManager.getActiveAutomation();
-        if (!automation) {
-          return {
-            success: false,
-            error: 'No active tab for automation'
-          };
-        }
-
-        const result = await this.automationService.executeAutomation(
-          request,
-          automation,
-          (step, index, total) => {
-            // Send progress updates to renderer
-            const agentUIView = this.windowManager.getAgentUIView();
-            if (agentUIView && !agentUIView.webContents.isDestroyed()) {
-              agentUIView.webContents.send('automation:progress', {
-                step,
-                index,
-                total
-              });
-            }
-          }
-        );
-
-        return result;
-      } catch (error) {
-        console.error('[IPC] Automation execution failed:', error);
-        return {
-          success: false,
-          error: (error as Error).message
-        };
-      }
-    });
-
-    // Generate plan only (without executing)
-    ipcMain.handle('automation:generate-plan', async (_, userPrompt: string, recordingSession: any) => {
-      try {
-        const result = await this.automationService.generatePlan(userPrompt, recordingSession);
-        return result;
-      } catch (error) {
-        console.error('[IPC] Plan generation failed:', error);
-        return {
-          success: false,
-          error: (error as Error).message
-        };
-      }
-    });
-
-    // Get automation status
-    ipcMain.handle('automation:get-status', async () => {
-      return this.automationService.getStatus();
-    });
-
-    // Cancel automation
-    ipcMain.handle('automation:cancel', async () => {
-      this.automationService.cancel();
-      return { success: true };
-    });
-  }
-
   public cleanup(): void {
     ipcMain.removeAllListeners('browser:create-tab');
     ipcMain.removeAllListeners('browser:close-tab');
@@ -512,6 +436,49 @@ export class IPCHandlers {
     // Extract and download context as JSON
     ipcMain.handle('context:extract-and-download', async (_, options?: any) => {
       return await this.browserManager.extractAndDownloadContext(options);
+    });
+  }
+
+  /**
+   * Automation test handlers
+   */
+  private setupAutomationHandlers(): void {
+    // Run test automation on current page
+    ipcMain.handle('automation:run-test', async () => {
+      try {
+        console.log('[IPC] Running test automation...');
+        
+        const executor = this.browserManager.getActiveAutomationExecutor();
+        if (!executor) {
+          return {
+            success: false,
+            error: 'No active tab or automation executor not available'
+          };
+        }
+
+        const testAutomation = new TestAutomation(executor);
+        const result = await testAutomation.executeGitHubNewRepoTest();
+
+        console.log('[IPC] Test automation completed:', result.success ? '✅ SUCCESS' : '❌ FAILED');
+        console.log('[IPC] Summary:', result.summary);
+        console.log('[IPC] Total actions executed:', result.results.length);
+
+        return {
+          success: result.success,
+          summary: result.summary,
+          results: result.results,
+          totalActions: result.results.length,
+          successfulActions: result.results.filter(r => r.success).length,
+          failedActions: result.results.filter(r => !r.success).length
+        };
+
+      } catch (error) {
+        console.error('[IPC] Test automation error:', error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        };
+      }
     });
   }
 }

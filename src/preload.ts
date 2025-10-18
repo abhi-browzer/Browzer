@@ -94,17 +94,13 @@ export interface BrowserAPI {
   getMostVisited: (limit?: number) => Promise<HistoryEntry[]>;
   getRecentlyVisited: (limit?: number) => Promise<HistoryEntry[]>;
 
-  // Automation Management
-  initializeAutomation: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
-  executeAutomation: (request: any) => Promise<any>;
-  generateAutomationPlan: (userPrompt: string, recordingSession: any) => Promise<any>;
-  getAutomationStatus: () => Promise<any>;
-  cancelAutomation: () => Promise<{ success: boolean }>;
-
   // Context Extraction
   extractBrowserContext: (options?: any) => Promise<any>;
   extractBrowserContextForTab: (tabId: string, options?: any) => Promise<any>;
   extractAndDownloadContext: (options?: any) => Promise<{ success: boolean; filePath?: string; error?: string }>;
+
+  // Test Automation
+  runTestAutomation: () => Promise<{ success: boolean; summary: string; results: any[]; totalActions: number; successfulActions?: number; failedActions?: number; error?: string }>;
 
   // Event listeners
   onTabsUpdated: (callback: (data: { tabs: TabInfo[]; activeTabId: string | null }) => void) => () => void;
@@ -113,7 +109,6 @@ export interface BrowserAPI {
   onRecordingStopped: (callback: (data: { actions: any[]; duration: number; startUrl: string }) => void) => () => void;
   onRecordingSaved: (callback: (session: any) => void) => () => void;
   onRecordingDeleted: (callback: (id: string) => void) => () => void;
-  onAutomationProgress: (callback: (data: any) => void) => () => void;
 }
 
 // Expose protected methods that allow the renderer process to use
@@ -257,24 +252,6 @@ const browserAPI: BrowserAPI = {
   isSiteBlacklisted: (origin: string) => 
     ipcRenderer.invoke('password:is-blacklisted', origin),
 
-  // Automation API
-  initializeAutomation: (apiKey: string) => 
-    ipcRenderer.invoke('automation:initialize', apiKey),
-  executeAutomation: (request: any) => 
-    ipcRenderer.invoke('automation:execute', request),
-  generateAutomationPlan: (userPrompt: string, recordingSession: any) => 
-    ipcRenderer.invoke('automation:generate-plan', userPrompt, recordingSession),
-  getAutomationStatus: () => 
-    ipcRenderer.invoke('automation:get-status'),
-  cancelAutomation: () => 
-    ipcRenderer.invoke('automation:cancel'),
-
-  onAutomationProgress: (callback) => {
-    const subscription = (_event: Electron.IpcRendererEvent, data: any) => callback(data);
-    ipcRenderer.on('automation:progress', subscription);
-    return () => ipcRenderer.removeListener('automation:progress', subscription);
-  },
-
   // Context Extraction API
   extractBrowserContext: (options?: any) => 
     ipcRenderer.invoke('context:extract', options),
@@ -282,6 +259,10 @@ const browserAPI: BrowserAPI = {
     ipcRenderer.invoke('context:extract-for-tab', tabId, options),
   extractAndDownloadContext: (options?: any) => 
     ipcRenderer.invoke('context:extract-and-download', options),
+
+  // Test Automation API
+  runTestAutomation: () => 
+    ipcRenderer.invoke('automation:run-test'),
 };
 
 contextBridge.exposeInMainWorld('browserAPI', browserAPI);

@@ -223,7 +223,7 @@ export class BrowserContextExtractor {
         // Extract forms (critical for automation)
         const forms = Array.from(document.querySelectorAll('form'))
           .filter(isVisible)
-          .slice(0, 0)
+          .slice(0, 50)
           .map(form => ({
             action: form.action || undefined,
             method: form.method || undefined,
