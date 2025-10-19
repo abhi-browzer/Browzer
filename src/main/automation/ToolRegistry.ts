@@ -1,75 +1,35 @@
-import { ToolRegistry } from '@/shared/types';
 import Anthropic from '@anthropic-ai/sdk';
 
 /**
- * Tool Registry for Browser Automation
+ * UPDATED Tool Registry with Enhanced Click & Type Guidance
  * 
- * Defines all available browser automation tools in Anthropic Claude's format.
- * These tools are designed for Claude Sonnet 3.5/4 with detailed descriptions
- * and parameter schemas following best practices.
- * 
- * CRITICAL SELECTOR GUIDELINES FOR LLMs:
- * ========================================
- * 
- * 1. ALWAYS CHECK BROWSER CONTEXT FIRST
- *    - Modern web apps often DON'T use "name" attributes
- *    - Look for: id, data-*, aria-*, placeholder, type
- *    - Example: GitHub uses id="repository-name-input" NOT name="repository[name]"
- * 
- * 2. AVOID REACT-GENERATED IDs WITH COLONS
- *    - ❌ BAD: #:r9:, #:ra:, #:rb: (breaks in CDP)
- *    - ✅ GOOD: Use attribute selectors instead
- *    - Example: input[aria-describedby*="RepoNameInput"] instead of #:r9:
- * 
- * 3. SELECTOR PRIORITY (Most to Least Reliable)
- *    1. Stable IDs: #username, #submit-button
- *    2. Attribute selectors: input[name=email], button[type=submit]
- *    3. Data attributes: [data-testid=login], [data-component=input]
- *    4. ARIA attributes: [aria-label=Submit], [aria-describedby*=username]
- *    5. Class combinations: button.btn.btn-primary (least reliable)
- * 
- * 4. ALWAYS PROVIDE BACKUP SELECTORS
- *    - Minimum 2-3 backup selectors for each action
- *    - Use different selector strategies for each backup
- *    - Example: [input[aria-label=Username], input[placeholder=Enter username], input[type=text]]
- * 
- * 5. COMMON PATTERNS BY SITE TYPE
- *    - GitHub: Uses id attributes (e.g., #repository-name-input)
- *    - Modern SPAs: Use data-* attributes (e.g., [data-testid=submit])
- *    - Legacy sites: Use name attributes (e.g., input[name=username])
- *    - React apps: Avoid :r9: IDs, use aria-* or data-* instead
- * 
- * 6. WHEN TO USE EACH TOOL
- *    - click: Buttons, links, tabs, dropdowns, any clickable element
- *    - type: Text inputs, textareas, search boxes, contenteditable
- *    - select: <select> dropdowns only (use label for best results)
- *    - checkbox: Checkboxes and radio buttons
- *    - waitForElement: Before interacting with dynamic content
- *    - scroll: To bring elements into view or navigate long pages
- *    - keyPress: Keyboard shortcuts, navigation, form submission
- *    - submit: Form submission (prefer click on submit button instead)
+ * Key improvements:
+ * 1. Clear selector priority and strategies
+ * 2. Explicit warnings about invalid syntax
+ * 3. Better parameter descriptions with examples
+ * 4. Guidance on when to use each tool
  */
 
 export const BROWSER_AUTOMATION_TOOLS: Anthropic.Tool[] = [
   {
     name: 'navigate',
-    description: 'Navigate to a specific URL in the browser. Use this to load a new page or website. Waits for the page to finish loading before returning. Always use complete URLs with protocol (https://).',
+    description: 'Navigate to a specific URL. Waits for page to finish loading. Always use complete URLs with https://.',
     input_schema: {
       type: 'object',
       properties: {
         url: {
           type: 'string',
-          description: 'The complete URL to navigate to, including protocol. Examples: "https://github.com/new", "https://example.com/login"'
+          description: 'Complete URL including protocol. Examples: "https://github.com/new", "https://example.com/login"'
         },
         waitUntil: {
           type: 'string',
-          description: 'When to consider navigation complete. Use "load" for most cases, "networkidle" for SPAs with async content',
+          description: 'When to consider navigation complete. Default: "load"',
           enum: ['load', 'domcontentloaded', 'networkidle'],
           default: 'load'
         },
         timeout: {
           type: 'number',
-          description: 'Maximum time to wait for navigation in milliseconds. Default is 30000 (30 seconds)',
+          description: 'Max wait time in milliseconds. Default: 30000',
           default: 30000
         }
       },
@@ -78,111 +38,202 @@ export const BROWSER_AUTOMATION_TOOLS: Anthropic.Tool[] = [
   },
   {
     name: 'click',
-    description: 'Click on an element in the browser. CRITICAL: Always provide multiple backup selectors for reliability. SELECTOR PRIORITY: 1) ID selectors (#element-id) 2) Attribute selectors (input[name="field"]) 3) Data attributes ([data-testid="btn"]) 4) Class combinations. AVOID: React-generated IDs with colons (e.g., #:r9:), they break in CDP. Use attribute selectors instead.',
+    description: `Click on an element. CRITICAL SELECTOR RULES:
+
+✅ VALID CSS SELECTORS (Use these):
+- ID: #submit-button, #repository-name-input
+- Attribute: button[type="submit"], input[name="username"], a[href="/login"]
+- Data attrs: [data-testid="submit"], [data-component="button"]
+- ARIA: [aria-label="Submit"], button[aria-label="Close"]
+- Class: button.btn-primary, .submit-btn (use with tag for specificity)
+- Type + Class: button.btn.btn-primary, input.form-control
+
+❌ INVALID SELECTORS (NEVER use these):
+- :has-text() - NOT CSS, use text parameter instead
+- :visible - NOT CSS, element visibility is handled automatically  
+- :enabled - NOT CSS, handled automatically
+- :contains() - jQuery syntax, not supported
+- :has() - Limited browser support, avoid
+
+🎯 SELECTOR STRATEGY:
+1. BEST: Stable IDs or data-testid → [data-testid="submit-btn"]
+2. GOOD: Attribute selectors → button[type="submit"]
+3. OK: ARIA labels → [aria-label="Submit form"]
+4. LAST RESORT: Class selectors → button.btn-primary
+
+⚠️ COMMON MISTAKES TO AVOID:
+- Don't use React-generated IDs with colons (#:r9:, #:ra:)
+- Don't combine Playwright or jQuery syntax with CSS at all. We are using CDP & executeJavaScript. Soo, NO Playwright or jQuery syntax.
+- Don't rely on text in selector, use text parameter instead
+
+📍 ELEMENT VISIBILITY:
+- Elements are AUTOMATICALLY scrolled into view
+- Elements below viewport will be found and clicked
+- Overlays/modals are detected and reported
+- No need to scroll manually before clicking
+
+🔄 BACKUP SELECTORS:
+- ALWAYS provide 2-3 backup selectors
+- Use different strategies for each backup
+- Example: [#submit, button[type="submit"], [aria-label="Submit"]]`,
     input_schema: {
       type: 'object',
       properties: {
         selector: {
           type: 'string',
-          description: 'Primary CSS selector. BEST PRACTICES: Use stable attributes like id, name, data-*, aria-label. Example: #submit-button or button[type=submit] or input[name=username]. NEVER use React IDs with colons like #:r9: - use attribute selectors instead.'
+          description: `Primary CSS selector. MUST be valid CSS. Examples:
+- #submit-button (ID)
+- button[type="submit"] (Attribute)
+- [data-testid="login-btn"] (Data attribute)
+- button[aria-label="Submit"] (ARIA)
+- button.btn-primary.btn (Classes with tag)
+
+DO NOT use: :has-text(), :visible, :contains(), or any Playwright/jQuery syntax`
         },
         backupSelectors: {
           type: 'array',
-          description: 'CRITICAL: Always provide 2-3 backup selectors. Examples: button[aria-label=Submit], button.primary-btn, form button[type=submit]',
+          description: `REQUIRED: at least 2-3 backup selectors using different strategies. Examples:
+["button[type='submit']", "[aria-label='Submit']", "form button.primary"]
+["#login-btn", "button[name='login']", "[data-testid='login-button']"]`,
           items: { type: 'string' }
         },
         text: {
           type: 'string',
-          description: 'Expected button/link text for verification. Helps confirm you\'re clicking the right element.'
+          description: 'Expected button/link text for verification. Used to find element by text if selectors fail. Example: "Send invitation", "Create repository"'
         },
         boundingBox: {
           type: 'object',
-          description: 'Element position from browser context. Use if provided to verify correct element.',
+          description: 'Element position from browser context. Used as fallback if selectors fail.',
           properties: {
-            x: { type: 'number' },
-            y: { type: 'number' },
-            width: { type: 'number' },
-            height: { type: 'number' }
+            x: { type: 'number', description: 'Left position in pixels' },
+            y: { type: 'number', description: 'Top position in pixels' },
+            width: { type: 'number', description: 'Width in pixels' },
+            height: { type: 'number', description: 'Height in pixels' }
           }
         },
         waitForElement: {
           type: 'number',
-          description: 'Wait time in ms before clicking. Use 1000-2000ms for dynamic content. Default: 1000',
+          description: 'Wait time before clicking (milliseconds). Use 1500-2000 for dynamic content that loads after page. Default: 1000',
           default: 1000
         },
         verifyVisible: {
           type: 'boolean',
-          description: 'Verify element is visible before clicking. Keep true unless clicking hidden elements.',
+          description: 'Verify element is visible. Keep true (default) for normal clicks. Only set false for special cases.',
           default: true
         }
       },
-      required: ['selector']
+      required: ['selector', 'backupSelectors']
     }
   },
   {
     name: 'type',
-    description: 'Type text into input fields, textareas, or contenteditable elements. IMPORTANT: Modern web apps often don\'t use "name" attributes. Check browser context for actual attributes. Look for: id, aria-describedby, data-component, placeholder. Example: GitHub uses id="repository-name-input" NOT name="repository[name]".',
+    description: `Type text into input fields. CRITICAL INPUT FINDING RULES:
+
+✅ VALID INPUT SELECTORS:
+- ID: #username, #email-input, #repository-name-input
+- Name: input[name="username"], input[name="email"]
+- Type: input[type="text"], input[type="email"], input[type="password"]
+- Placeholder: input[placeholder="Enter username"]
+- Data attrs: input[data-testid="username"], [data-component="text-input"]
+- ARIA: input[aria-label="Username"], [aria-describedby*="username"]
+
+❌ COMMON MISTAKES:
+- Don't assume "name" attribute exists (many modern sites don't use it)
+- Don't use React IDs with colons (#:r9:)
+- Always check browser context for actual attributes
+
+🎯 INPUT FINDING STRATEGY:
+1. Check browser context for actual attributes
+2. Use ID if available (#repository-name-input)
+3. Use data-testid or data-component
+4. Use placeholder text as selector
+5. Use type + aria-label combination
+
+⚙️ TYPING BEHAVIOR:
+- Automatically scrolls input into view
+- Automatically focuses input
+- Clears existing content by default (clearFirst: true)
+- Types character-by-character with proper events
+- Can press Enter after typing (pressEnter: true)
+
+📝 BEST PRACTICES:
+- For search boxes: set pressEnter: true
+- For form fields: set pressEnter: false, use submit or click submit button
+- For single-field forms: pressEnter: true
+- Always provide 2-3 backup selectors`,
     input_schema: {
       type: 'object',
       properties: {
         selector: {
           type: 'string',
-          description: 'CSS selector for input. BEST: ID (#username), attribute (input[name=email]), data attribute (input[data-testid=search]). Check browser context for actual attributes - many modern sites do not use name attributes.'
+          description: `Primary CSS selector for input. Check browser context for actual attributes. Examples:
+- #username (ID - best if available)
+- input[name="email"] (Name attribute - check if exists)
+- input[placeholder="Enter username"] (Placeholder)
+- [data-testid="username-input"] (Data attribute)
+- input[aria-label="Username"] (ARIA label)
+
+IMPORTANT: Don't assume name attribute exists. Modern sites often use id, data-*, or aria-* instead.`
         },
         backupSelectors: {
           type: 'array',
-          description: 'CRITICAL: Provide 2-3 backups. Example: input[aria-label=Username], input[placeholder=Enter username], input[type=text]',
+          description: `REQUIRED: 2-3 backup selectors. Use different attribute types. Examples:
+["input[placeholder='Username']", "input[type='text']", "[aria-label='Username']"]
+["#email", "input[name='email']", "input[type='email']"]`,
           items: { type: 'string' }
         },
         text: {
           type: 'string',
-          description: 'Text to type. Will be typed character by character to trigger proper events.'
+          description: 'Text to type into the input. Will be typed character-by-character to trigger proper input events.'
         },
         clearFirst: {
           type: 'boolean',
-          description: 'Clear existing content before typing. Usually true. Set false to append text.',
+          description: 'Clear existing content before typing. Default: true. Set false to append text.',
           default: true
         },
         pressEnter: {
           type: 'boolean',
-          description: 'Press Enter after typing. Use true for: search boxes, single-field forms, chat inputs.',
+          description: `Press Enter key after typing. Use cases:
+- true: Search boxes, single-field forms, chat inputs, command inputs
+- false: Multi-field forms (use submit button instead), text areas
+Default: false`,
           default: false
         },
         waitForElement: {
           type: 'number',
-          description: 'Wait before typing (ms). Use 1000-2000 for dynamic forms. Default: 1000',
+          description: 'Wait time before typing (ms). Use 1500-2000 for dynamically loaded forms. Default: 1000',
           default: 1000
         }
       },
-      required: ['selector', 'text']
+      required: ['selector', 'backupSelectors', 'text']
     }
   },
   {
     name: 'select',
-    description: 'Select an option from a dropdown/select element. Provide ONE of: value, label, or index. BEST: Use label (visible text) as it is most reliable. Example: label=United States works better than value=US.',
+    description: 'Select an option from a <select> dropdown. BEST PRACTICE: Use label (visible text) as it is most reliable.',
     input_schema: {
       type: 'object',
       properties: {
         selector: {
           type: 'string',
-          description: 'CSS selector for the select element. Example: select[name=country], #country-dropdown, select[aria-label=Choose country]'
+          description: 'CSS selector for <select> element. Examples: select[name="country"], #country-dropdown, select[aria-label="Choose country"]'
         },
         backupSelectors: {
           type: 'array',
-          description: 'Backup selectors for the dropdown',
+          description: 'Backup selectors for the select element',
           items: { type: 'string' }
         },
         value: {
           type: 'string',
-          description: 'The value attribute of the option (e.g., value=us for <option value=us>). Use when you know the exact value.'
+          description: 'Option value attribute (e.g., "us" for <option value="us">). Use when you know the exact value.'
         },
         label: {
           type: 'string',
-          description: 'The visible text of the option (RECOMMENDED). Example: United States, Blue, Large. This is what users see.'
+          description: 'RECOMMENDED: Visible text of option (e.g., "United States", "Blue"). This is what users see in the dropdown.'
         },
         index: {
           type: 'number',
-          description: 'Zero-based index (0=first option, 1=second, etc.). Use only when value/label unknown.'
+          description: 'Zero-based index (0=first, 1=second). Use only when value/label are unknown.'
         },
         waitForElement: {
           type: 'number',
@@ -195,22 +246,28 @@ export const BROWSER_AUTOMATION_TOOLS: Anthropic.Tool[] = [
   },
   {
     name: 'checkbox',
-    description: 'Check or uncheck a checkbox or radio button. IMPORTANT: Modern sites often use input[type=checkbox] without name attributes. Look for: data-component=checkbox, aria-describedby, or aria-label in browser context.',
+    description: 'Check or uncheck a checkbox/radio button. Modern sites often use custom attributes instead of name.',
     input_schema: {
       type: 'object',
       properties: {
         selector: {
           type: 'string',
-          description: 'CSS selector for checkbox. Examples: input[type=checkbox][data-component=checkbox], input[aria-label=Accept terms], #agree-checkbox. Check browser context for actual attributes.'
+          description: `CSS selector for checkbox. Check browser context for actual attributes. Examples:
+- input[type="checkbox"][data-component="checkbox"] (Data attribute)
+- input[type="checkbox"][aria-label="Accept terms"] (ARIA)
+- #agree-checkbox (ID if available)
+- input[name="agree"] (Name - check if exists)
+
+Don't assume name attribute exists.`
         },
         backupSelectors: {
           type: 'array',
-          description: 'Backup selectors. Example: input[type=checkbox], input[aria-describedby*=checkbox]',
+          description: 'Backup selectors. Example: ["input[type=checkbox]", "[aria-describedby*=checkbox]"]',
           items: { type: 'string' }
         },
         checked: {
           type: 'boolean',
-          description: 'true to check the box, false to uncheck it. Use true for: agree to terms, enable feature, select option.'
+          description: 'true to check, false to uncheck. Use true for: agree to terms, enable feature, select option.'
         },
         waitForElement: {
           type: 'number',
@@ -222,24 +279,45 @@ export const BROWSER_AUTOMATION_TOOLS: Anthropic.Tool[] = [
     }
   },
   {
+    name: 'wait',
+    description: `Simple wait/sleep. Use when you need to wait for:
+- Page to settle after action
+- Animations to complete
+- Dynamic content to load (when no reliable selector exists)
+- Network requests to complete
+
+This tool NEVER fails - it just waits. Prefer this over waitForElement when selectors are unreliable or you just need time for page to stabilize.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        duration: {
+          type: 'number',
+          description: 'Duration in milliseconds. Common values: 1000 (1 sec), 2000 (2 sec), 3000 (3 sec). Use 1000-2000ms for most cases.',
+          default: 1000
+        }
+      },
+      required: ['duration']
+    }
+  },
+  {
     name: 'waitForElement',
-    description: 'Wait for an element to appear, disappear, or be attached to DOM. Use BEFORE interacting with dynamic content. Common scenarios: wait for loading spinner to disappear (state=hidden), wait for success message (state=visible), wait for form to load (state=visible). Timeout: 10 seconds default.',
+    description: 'Wait for an element to appear/disappear. Use before interacting with dynamically loaded content.',
     input_schema: {
       type: 'object',
       properties: {
         selector: {
           type: 'string',
-          description: 'CSS selector for element. Examples: #loading-spinner, .success-message, input[name=username]'
+          description: 'CSS selector of element to wait for. Must be valid CSS.'
         },
         state: {
           type: 'string',
-          description: 'State to wait for. visible=element appears and is visible, hidden=element disappears, attached=element exists in DOM. Use visible for most cases.',
+          description: 'Target state. visible: wait for element to appear, hidden: wait to disappear, attached: wait for element in DOM',
           enum: ['visible', 'hidden', 'attached'],
           default: 'visible'
         },
         timeout: {
           type: 'number',
-          description: 'Max wait time (ms). Default: 10000 (10 seconds). Increase for slow-loading content.',
+          description: 'Max wait time (ms). Default: 10000 (10 seconds)',
           default: 10000
         }
       },
@@ -248,17 +326,18 @@ export const BROWSER_AUTOMATION_TOOLS: Anthropic.Tool[] = [
   },
   {
     name: 'keyPress',
-    description: 'Press keyboard keys with optional modifiers. Use for: keyboard shortcuts (Ctrl+S), navigation (Tab, Enter, Escape), dropdown navigation (ArrowDown), form submission (Enter). Can focus element first if selector provided.',
+    description: 'Press keyboard keys. Use for: keyboard shortcuts (Ctrl+S), navigation (Tab, Enter, Escape), dropdown navigation (Arrow keys).',
     input_schema: {
       type: 'object',
       properties: {
         key: {
           type: 'string',
-          description: 'Key to press. Special keys: Enter, Escape, Tab, Backspace, Delete, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Home, End, PageUp, PageDown, Space. Letters: a, b, c (lowercase) or A, B, C (uppercase with Shift).'
+          description: `Key to press. Special keys: Enter, Escape, Tab, Backspace, Delete, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Home, End, PageUp, PageDown, Space
+Letters: a, b, c (lowercase) or with Shift modifier for uppercase`
         },
         modifiers: {
           type: 'array',
-          description: 'Modifier keys to hold. Examples: [Control, S] for Ctrl+S, [Meta, C] for Cmd+C (Mac), [Shift] for Shift+Tab',
+          description: 'Modifier keys. Examples: ["Control", "S"] for Ctrl+S, ["Meta", "C"] for Cmd+C, ["Shift"] for Shift+Tab',
           items: {
             type: 'string',
             enum: ['Control', 'Shift', 'Alt', 'Meta']
@@ -266,7 +345,7 @@ export const BROWSER_AUTOMATION_TOOLS: Anthropic.Tool[] = [
         },
         selector: {
           type: 'string',
-          description: 'Optional: Focus this element before pressing key. Example: input[name=search] then press Enter to submit.'
+          description: 'Optional: Focus this element before pressing key. Example: input[name="search"] then press Enter'
         }
       },
       required: ['key']
@@ -274,13 +353,13 @@ export const BROWSER_AUTOMATION_TOOLS: Anthropic.Tool[] = [
   },
   {
     name: 'scroll',
-    description: 'Scroll the page or scroll to specific element. TWO MODES: 1) Directional scroll (direction + amount) for general scrolling, 2) Scroll to element (toElement) to bring element into view. Use toElement when you need to see/interact with element below fold.',
+    description: 'Scroll the page. NOTE: Elements are automatically scrolled into view before clicking/typing, so manual scrolling is rarely needed.',
     input_schema: {
       type: 'object',
       properties: {
         direction: {
           type: 'string',
-          description: 'Scroll direction. Use with amount parameter. Common: down to see more content, up to go back.',
+          description: 'Scroll direction. Use with amount parameter.',
           enum: ['up', 'down', 'left', 'right']
         },
         amount: {
@@ -290,7 +369,7 @@ export const BROWSER_AUTOMATION_TOOLS: Anthropic.Tool[] = [
         },
         toElement: {
           type: 'string',
-          description: 'CSS selector of element to scroll to. Element will be centered in viewport. Example: #submit-button, .terms-section. Use instead of direction/amount.'
+          description: 'CSS selector of element to scroll to. Element will be centered in viewport. Use instead of direction/amount when you need specific element visible.'
         }
       },
       required: []
@@ -298,33 +377,23 @@ export const BROWSER_AUTOMATION_TOOLS: Anthropic.Tool[] = [
   },
   {
     name: 'submit',
-    description: 'Submit a form. TWO MODES: 1) Click submit button (RECOMMENDED - use submitButtonSelector), 2) Direct form submit (use formSelector). BEST PRACTICE: Use submitButtonSelector with click tool instead for better compatibility. This tool is for edge cases.',
+    description: 'Submit a form. BEST PRACTICE: Use click tool on submit button instead for better compatibility. This tool is for edge cases.',
     input_schema: {
       type: 'object',
       properties: {
         formSelector: {
           type: 'string',
-          description: 'CSS selector for form element. Example: form[name=login], #checkout-form. Defaults to first form if omitted. Direct submit may skip validation.'
+          description: 'CSS selector for form element. Example: form[name="login"], #checkout-form. Defaults to first form if omitted.'
         },
         submitButtonSelector: {
           type: 'string',
-          description: 'RECOMMENDED: CSS selector for submit button. Example: button[type=submit], #submit-btn. This clicks the button instead of direct submit, triggering validation.'
+          description: 'RECOMMENDED: CSS selector for submit button. This clicks the button instead of direct submit, triggering validation. Example: button[type="submit"], #submit-btn'
         }
       },
       required: []
     }
   }
 ];
-
-/**
- * Get the complete tool registry
- */
-export function getBrowserAutomationToolRegistry(): ToolRegistry {
-  return {
-    tools: BROWSER_AUTOMATION_TOOLS,
-    version: '1.0.0'
-  };
-}
 
 /**
  * Get a specific tool definition by name
@@ -336,31 +405,56 @@ export function getToolDefinition(toolName: string): Anthropic.Tool | undefined 
 /**
  * Validate tool parameters against schema
  */
-export function validateToolParams(toolName: string, params: any): { valid: boolean; errors?: string[] } {
+export function validateToolParams(toolName: string, params: Record<string, unknown>): { valid: boolean; errors?: string[] } {
   const tool = getToolDefinition(toolName);
   if (!tool) {
     return { valid: false, errors: [`Unknown tool: ${toolName}`] };
   }
 
   const errors: string[] = [];
-  const schema = tool.input_schema;
+  const schema = tool.input_schema as { required?: string[]; properties: Record<string, any> };
 
   // Check required parameters
-  for (const required of schema.required) {
+  for (const required of schema.required || []) {
     if (!(required in params)) {
       errors.push(`Missing required parameter: ${required}`);
     }
   }
 
-  // // Basic type checking
-  // for (const [key, value] of Object.entries(params)) {
-  //   if (!(key in schema.properties)) {
-  //     errors.push(`Unknown parameter: ${key}`);
-  //   }
-  // }
+  // Validate selector syntax for click/type tools
+  if ((toolName === 'click' || toolName === 'type') && params.selector) {
+    const selector = params.selector as string;
+    const invalidPatterns = [':has-text(', ':visible', ':enabled', ':contains(', ':has(', ':text('];
+    const hasInvalid = invalidPatterns.some(pattern => selector.includes(pattern));
+    
+    if (hasInvalid) {
+      errors.push(`Invalid selector syntax: "${selector}". Do not use Playwright/jQuery syntax like :has-text(), :visible, :contains(). Use pure CSS selectors and the 'text' parameter for text matching.`);
+    }
+  }
 
   return {
     valid: errors.length === 0,
     errors: errors.length > 0 ? errors : undefined
   };
+}
+
+/**
+ * ToolRegistry class
+ */
+export class ToolRegistry {
+  public getToolDefinitions(): Anthropic.Tool[] {
+    return BROWSER_AUTOMATION_TOOLS;
+  }
+
+  public getToolNames(): string[] {
+    return BROWSER_AUTOMATION_TOOLS.map(tool => tool.name);
+  }
+
+  public getTool(name: string): Anthropic.Tool | undefined {
+    return BROWSER_AUTOMATION_TOOLS.find(tool => tool.name === name);
+  }
+
+  public validateToolParams(toolName: string, params: Record<string, unknown>): { valid: boolean; errors?: string[] } {
+    return validateToolParams(toolName, params);
+  }
 }

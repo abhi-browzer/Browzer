@@ -69,7 +69,6 @@ export default function AgentView() {
   const saveApiKey = async () => {
     try {
       await window.browserAPI.updateSetting('automation', 'apiKey', apiKey);
-      await window.browserAPI.initializeAutomation(apiKey);
       toast.success('API key saved successfully');
       setShowSettings(false);
     } catch (error) {
@@ -119,58 +118,30 @@ export default function AgentView() {
     }
 
     try {
-      // Initialize automation
-      await window.browserAPI.initializeAutomation(apiKey);
-
-      // Set up progress listener
-      const unsubscribe = window.browserAPI.onAutomationProgress((data: { 
-        step: AutomationStep; 
-        index: number; 
-        total: number 
-      }) => {
-        const { step, index, total } = data;
-        
-        setTotalCount(total);
-        setCompletedCount(index);
-        
-        setCurrentSteps(prev => {
-          const newSteps = [...prev];
-          const existingIndex = newSteps.findIndex(s => s.id === step.id);
-          
-          if (existingIndex >= 0) {
-            newSteps[existingIndex] = step;
-          } else {
-            newSteps.push(step);
-          }
-          
-          return newSteps;
-        });
-      });
-
       addMessage({
         type: 'system',
         content: `🤖 Generating automation plan using recording: "${session.name}"...`
       });
 
-      // Execute automation
-      const result = await window.browserAPI.executeAutomation({
-        userPrompt,
-        recordingSession: session,
-        apiKey
-      });
-
-      unsubscribe();
+      // Execute LLM automation with new API
+      const result = await window.browserAPI.executeLLMAutomation(userPrompt, selectedSession);
 
       if (result.success) {
+        const plan = result.plan as any;
+        const usage = result.usage as any;
+        
         addMessage({
           type: 'system',
-          content: `✅ Automation completed successfully!\n\nCompleted: ${result.plan.completedSteps}/${result.plan.steps.length} steps\nDuration: ${(result.executionTime / 1000).toFixed(2)}s`
+          content: `✅ Automation completed successfully!\n\n` +
+            `Steps executed: ${plan?.totalSteps || 0}\n` +
+            `Cost: $${usage?.totalCost?.toFixed(4) || '0.0000'}\n` +
+            `Tokens: ${usage?.inputTokens || 0} in, ${usage?.outputTokens || 0} out`
         });
         toast.success('Automation completed!');
       } else {
         addMessage({
           type: 'system',
-          content: `❌ Automation failed: ${result.error}\n\nCompleted: ${result.plan.completedSteps}/${result.plan.steps.length} steps`
+          content: `❌ Automation failed: ${result.error}`
         });
         toast.error('Automation failed');
       }
@@ -192,18 +163,15 @@ export default function AgentView() {
   };
 
   const handleCancel = async () => {
-    try {
-      await window.browserAPI.cancelAutomation();
-      addMessage({
-        type: 'system',
-        content: '🛑 Automation cancelled by user'
-      });
-      setIsExecuting(false);
-      setCurrentSteps([]);
-      toast.info('Automation cancelled');
-    } catch (error) {
-      console.error('Failed to cancel:', error);
-    }
+    // Note: Cancellation not yet implemented for LLM automation
+    // For now, just reset the UI state
+    addMessage({
+      type: 'system',
+      content: '🛑 Automation cancelled by user (Note: In-progress automation will continue)'
+    });
+    setIsExecuting(false);
+    setCurrentSteps([]);
+    toast.info('UI reset - automation may still be running');
   };
 
   // Settings View

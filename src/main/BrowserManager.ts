@@ -9,6 +9,7 @@ import { stat, writeFile } from 'fs/promises';
 import { PasswordUtil } from '@/main/utils/PasswordUtil';
 import { PasswordAutomation, BrowserAutomationExecutor } from './automation';
 import { BrowserContextExtractor } from './context';
+import { LLMAutomationService } from './llm';
 
 // Internal tab structure (includes WebContentsView)
 interface Tab {
@@ -54,6 +55,9 @@ export class BrowserManager {
   private lastActiveTabId: string | null = null;
   private activeVideoRecorder: VideoRecorder | null = null;
 
+  // LLM Automation Service
+  private llmAutomationService: LLMAutomationService;
+
   constructor(baseWindow: BaseWindow, chromeHeight: number, agentUIView?: WebContentsView) {
     this.baseWindow = baseWindow;
     this.agentUIHeight = chromeHeight;
@@ -64,6 +68,17 @@ export class BrowserManager {
     
     // Initialize centralized recorder (without view initially)
     this.centralRecorder = new ActionRecorder();
+    
+    // Initialize LLM Automation Service (will use active tab's executor)
+    // We'll pass a dummy executor for now, actual executor is per-tab
+    const dummyView = new WebContentsView();
+    const dummyExecutor = new BrowserAutomationExecutor(dummyView, 'init');
+    this.llmAutomationService = new LLMAutomationService(
+      dummyExecutor,
+      this.recordingStore,
+      process.env.ANTHROPIC_API_KEY
+    );
+    
     // Create initial tab
     this.createTab('https://www.google.com');
   }
@@ -508,8 +523,63 @@ export class BrowserManager {
   /**
    * Get all recordings
    */
-  public getAllRecordings(): RecordingSession[] {
-    return this.recordingStore.getAllRecordings();
+  public getRecordingStore(): RecordingStore {
+    return this.recordingStore;
+  }
+
+  /**
+   * Execute LLM-powered automation on the active tab
+   * 
+   * @param userGoal - What the user wants to automate
+   * @param recordedSessionId - ID of recorded session to use as reference
+   * @returns Automation result
+   */
+  public async executeLLMAutomation(
+    userGoal: string,
+    recordedSessionId: string
+  ): Promise<{
+    success: boolean;
+    error?: string;
+    plan?: unknown;
+    executionResults?: unknown[];
+    usage?: unknown;
+  }> {
+    console.log('[BrowserManager] Starting LLM automation...');
+    console.log(`  Goal: ${userGoal}`);
+    console.log(`  Recording ID: ${recordedSessionId}`);
+
+    const tab = this.tabs.get(this.activeTabId);
+
+    // Ensure automation executor exists for this tab
+    if (!tab.automationExecutor) {
+      tab.automationExecutor = new BrowserAutomationExecutor(tab.view, tab.id);
+    }
+
+    // Create a new LLM service instance with the active tab's executor
+    const llmService = new LLMAutomationService(
+      tab.automationExecutor,
+      this.recordingStore,
+      process.env.ANTHROPIC_API_KEY
+    );
+
+    // Execute automation
+    try {
+      const result = await llmService.executeAutomation(userGoal, recordedSessionId);
+      
+      console.log('[BrowserManager] LLM automation completed');
+      console.log(`  Success: ${result.success}`);
+      if (result.usage) {
+        console.log(`  Cost: $${result.usage.totalCost.toFixed(4)}`);
+      }
+
+      return result;
+    } catch (error) {
+      console.error('[BrowserManager] LLM automation failed:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
   }
 
   /**
