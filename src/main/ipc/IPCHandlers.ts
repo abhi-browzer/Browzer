@@ -7,7 +7,6 @@ import { SettingsStore, AppSettings } from '@/main/settings/SettingsStore';
 import { UserService } from '@/main/user/UserService';
 import { PasswordManager } from '@/main/password/PasswordManager';
 import { RecordedAction, HistoryQuery } from '@/shared/types';
-import { TestAutomation } from '@/main/automation';
 
 /**
  * IPCHandlers - Centralized IPC communication setup
@@ -479,44 +478,6 @@ export class IPCHandlers {
    * Automation test handlers
    */
   private setupAutomationHandlers(): void {
-    // Run test automation on current page
-    ipcMain.handle('automation:run-test', async () => {
-      try {
-        console.log('[IPC] Running test automation...');
-        
-        const executor = this.browserManager.getActiveAutomationExecutor();
-        if (!executor) {
-          return {
-            success: false,
-            error: 'No active tab or automation executor not available'
-          };
-        }
-
-        const testAutomation = new TestAutomation(executor);
-        const result = await testAutomation.executeGitHubNewRepoTest();
-
-        console.log('[IPC] Test automation completed:', result.success ? '✅ SUCCESS' : '❌ FAILED');
-        console.log('[IPC] Summary:', result.summary);
-        console.log('[IPC] Total actions executed:', result.results.length);
-
-        return {
-          success: result.success,
-          summary: result.summary,
-          results: result.results,
-          totalActions: result.results.length,
-          successfulActions: result.results.filter(r => r.success).length,
-          failedActions: result.results.filter(r => !r.success).length
-        };
-
-      } catch (error) {
-        console.error('[IPC] Test automation error:', error);
-        return {
-          success: false,
-          error: error instanceof Error ? error.message : 'Unknown error'
-        };
-      }
-    });
-
     // Execute LLM-powered automation
     ipcMain.handle('automation:execute-llm', async (_, userGoal: string, recordedSessionId: string) => {
       try {

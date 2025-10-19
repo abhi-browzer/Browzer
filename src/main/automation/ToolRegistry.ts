@@ -127,7 +127,7 @@ DO NOT use: :has-text(), :visible, :contains(), or any Playwright/jQuery syntax`
   },
   {
     name: 'type',
-    description: `Type text into input fields. CRITICAL INPUT FINDING RULES:
+    description: `Type text into input fields with NATIVE-LIKE INPUT SIMULATION. Uses Chrome DevTools Protocol for authentic typing that triggers ALL validation and state updates in modern web apps (React, Vue, Angular, etc.).
 
 ✅ VALID INPUT SELECTORS:
 - ID: #username, #email-input, #repository-name-input
@@ -149,18 +149,23 @@ DO NOT use: :has-text(), :visible, :contains(), or any Playwright/jQuery syntax`
 4. Use placeholder text as selector
 5. Use type + aria-label combination
 
-⚙️ TYPING BEHAVIOR:
+⚙️ ADVANCED TYPING IMPLEMENTATION:
+- Uses CDP Input.insertText for native browser input handling
+- Triggers proper keyboard events (keydown, keyup) with correct key codes
+- Dispatches InputEvent with proper inputType ('insertText')
+- Updates React's _valueTracker for proper state synchronization
 - Automatically scrolls input into view
-- Automatically focuses input
-- Clears existing content by default (clearFirst: true)
-- Types character-by-character with proper events
+- Simulates mouse click for realistic focus
+- Clears existing content with proper event triggering (clearFirst: true)
+- Types character-by-character with realistic timing (15ms delay)
 - Can press Enter after typing (pressEnter: true)
 
 📝 BEST PRACTICES:
 - For search boxes: set pressEnter: true
 - For form fields: set pressEnter: false, use submit or click submit button
 - For single-field forms: pressEnter: true
-- Always provide 2-3 backup selectors`,
+- Always provide 2-3 backup selectors
+- Use waitForElement: 2000-2500 for dynamically loaded forms`,
     input_schema: {
       type: 'object',
       properties: {

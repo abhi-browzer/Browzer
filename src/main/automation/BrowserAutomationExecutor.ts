@@ -836,12 +836,8 @@ export class BrowserAutomationExecutor {
     return await this.view.webContents.executeJavaScript(script);
   }
 
-  // ============================================================================
-  // ADVANCED TYPE IMPLEMENTATION
-  // ============================================================================
-
   /**
-   * Advanced type with robust input handling
+   * Advanced type with robust input handling using CDP + React/Vue event triggering
    */
   public async type(params: TypeParams): Promise<ToolExecutionResult> {
     const startTime = Date.now();
@@ -875,7 +871,7 @@ export class BrowserAutomationExecutor {
 
       console.log(`[Automation] ✅ Found input with: ${elementResult.usedSelector}`);
 
-      // Ensure input is visible and focusable
+      // Prepare input (scroll, focus, clear)
       const prepResult = await this.prepareInputForTyping(
         elementResult.usedSelector,
         params.clearFirst ?? true
@@ -895,8 +891,8 @@ export class BrowserAutomationExecutor {
         });
       }
 
-      // Perform typing
-      const typeResult = await this.performAdvancedTyping(
+      // Perform typing using hybrid CDP + event simulation approach
+      const typeResult = await this.performRobustTyping(
         elementResult.usedSelector,
         params.text,
         params.pressEnter ?? false
@@ -955,7 +951,7 @@ export class BrowserAutomationExecutor {
   }
 
   /**
-   * Prepare input for typing - scroll, focus, clear
+   * Prepare input for typing - scroll, focus, clear with proper React/Vue handling
    */
   private async prepareInputForTyping(
     selector: string,
@@ -982,22 +978,67 @@ export class BrowserAutomationExecutor {
 
           // Scroll into view
           input.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise(resolve => setTimeout(resolve, 300));
 
-          // Focus input
+          // Click to focus (more realistic than .focus())
+          const rect = input.getBoundingClientRect();
+          const clickEvent = new MouseEvent('mousedown', {
+            bubbles: true,
+            cancelable: true,
+            view: window,
+            clientX: rect.left + rect.width / 2,
+            clientY: rect.top + rect.height / 2
+          });
+          input.dispatchEvent(clickEvent);
+          
+          const clickUpEvent = new MouseEvent('mouseup', {
+            bubbles: true,
+            cancelable: true,
+            view: window,
+            clientX: rect.left + rect.width / 2,
+            clientY: rect.top + rect.height / 2
+          });
+          input.dispatchEvent(clickUpEvent);
+          
           input.focus();
-          await new Promise(resolve => setTimeout(resolve, 200));
+          await new Promise(resolve => setTimeout(resolve, 100));
 
-          // Clear if requested
+          // Clear if requested - with React/Vue support
           if (${clearFirst}) {
-            // Multiple clear strategies
-            input.value = '';
-            input.dispatchEvent(new Event('input', { bubbles: true }));
-            input.dispatchEvent(new Event('change', { bubbles: true }));
+            // Get current value for proper event triggering
+            const currentValue = input.value;
             
-            // Also try selection + delete
-            input.select();
-            document.execCommand('delete');
+            if (currentValue) {
+              // Select all
+              input.setSelectionRange(0, currentValue.length);
+              
+              // Trigger beforeinput event (critical for modern frameworks)
+              const beforeInputEvent = new InputEvent('beforeinput', {
+                bubbles: true,
+                cancelable: true,
+                inputType: 'deleteContentBackward',
+                data: null
+              });
+              input.dispatchEvent(beforeInputEvent);
+              
+              // Clear value using native setter to trigger React's property descriptor
+              const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+                window.HTMLInputElement.prototype,
+                'value'
+              ).set;
+              nativeInputValueSetter.call(input, '');
+              
+              // Trigger input event (React/Vue listen to this)
+              const inputEvent = new InputEvent('input', {
+                bubbles: true,
+                cancelable: true,
+                inputType: 'deleteContentBackward'
+              });
+              input.dispatchEvent(inputEvent);
+              
+              // Trigger change event
+              input.dispatchEvent(new Event('change', { bubbles: true }));
+            }
           }
 
           return { success: true };
@@ -1011,9 +1052,10 @@ export class BrowserAutomationExecutor {
   }
 
   /**
-   * Perform typing with proper event simulation
+   * Perform robust typing using CDP Input.insertText + comprehensive event simulation
+   * This properly triggers React/Vue state updates and all validation events
    */
-  private async performAdvancedTyping(
+  private async performRobustTyping(
     selector: string,
     text: string,
     pressEnter: boolean
@@ -1022,90 +1064,160 @@ export class BrowserAutomationExecutor {
     error?: string;
     lastError?: string;
   }> {
-    const script = `
-      (async function() {
-        try {
+    try {
+      // Type character by character using CDP for native-like input
+      for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        
+        // Use CDP to dispatch keyboard events (more native than JS events)
+        // This triggers browser's native input handling
+        await this.debugger.sendCommand('Input.dispatchKeyEvent', {
+          type: 'keyDown',
+          text: char,
+          key: char,
+          code: this.getKeyCodeString(char),
+          windowsVirtualKeyCode: char.charCodeAt(0),
+          nativeVirtualKeyCode: char.charCodeAt(0)
+        });
+
+        // Insert text using CDP - this properly updates the input value
+        await this.debugger.sendCommand('Input.insertText', {
+          text: char
+        });
+
+        await this.debugger.sendCommand('Input.dispatchKeyEvent', {
+          type: 'keyUp',
+          key: char,
+          code: this.getKeyCodeString(char),
+          windowsVirtualKeyCode: char.charCodeAt(0),
+          nativeVirtualKeyCode: char.charCodeAt(0)
+        });
+
+        // Trigger React/Vue events after each character
+        await this.view.webContents.executeJavaScript(`
+          (function() {
+            const input = document.querySelector(${JSON.stringify(selector)});
+            if (input) {
+              // Trigger input event with proper InputEvent constructor
+              const inputEvent = new InputEvent('input', {
+                bubbles: true,
+                cancelable: true,
+                inputType: 'insertText',
+                data: ${JSON.stringify(char)}
+              });
+              input.dispatchEvent(inputEvent);
+              
+              // Update React's internal value tracker if present
+              if (input._valueTracker) {
+                input._valueTracker.setValue('');
+              }
+            }
+          })();
+        `);
+
+        // Small delay for realism and to allow event handlers to process
+        await this.sleep(15);
+      }
+
+      // Trigger final change event after all typing
+      await this.view.webContents.executeJavaScript(`
+        (function() {
           const input = document.querySelector(${JSON.stringify(selector)});
-          if (!input) return { success: false, error: 'Input disappeared' };
-
-          const text = ${JSON.stringify(text)};
-          
-          // Type character by character with proper events
-          for (let i = 0; i < text.length; i++) {
-            const char = text[i];
+          if (input) {
+            input.dispatchEvent(new Event('change', { bubbles: true }));
             
-            // Simulate keydown
-            const keydownEvent = new KeyboardEvent('keydown', {
-              key: char,
-              code: 'Key' + char.toUpperCase(),
-              bubbles: true,
-              cancelable: true
-            });
-            input.dispatchEvent(keydownEvent);
-
-            // Simulate keypress (deprecated but some sites still use)
-            const keypressEvent = new KeyboardEvent('keypress', {
-              key: char,
-              code: 'Key' + char.toUpperCase(),
-              bubbles: true,
-              cancelable: true
-            });
-            input.dispatchEvent(keypressEvent);
-
-            // Update value
-            input.value += char;
-
-            // Dispatch input event (important for React/Vue)
-            const inputEvent = new Event('input', { bubbles: true });
-            input.dispatchEvent(inputEvent);
-
-            // Simulate keyup
-            const keyupEvent = new KeyboardEvent('keyup', {
-              key: char,
-              code: 'Key' + char.toUpperCase(),
-              bubbles: true,
-              cancelable: true
-            });
-            input.dispatchEvent(keyupEvent);
-
-            // Small delay between characters for realism
-            await new Promise(resolve => setTimeout(resolve, 10));
+            // Blur and refocus to trigger any blur/focus validation
+            input.blur();
+            setTimeout(() => input.focus(), 10);
           }
+        })();
+      `);
 
-          // Trigger change event after all typing
-          input.dispatchEvent(new Event('change', { bubbles: true }));
+      await this.sleep(50);
 
-          // Press Enter if requested
-          if (${pressEnter}) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-            
-            const enterDown = new KeyboardEvent('keydown', {
-              key: 'Enter',
-              code: 'Enter',
-              keyCode: 13,
-              bubbles: true,
-              cancelable: true
-            });
-            input.dispatchEvent(enterDown);
+      // Press Enter if requested
+      if (pressEnter) {
+        await this.sleep(100);
+        
+        await this.debugger.sendCommand('Input.dispatchKeyEvent', {
+          type: 'keyDown',
+          key: 'Enter',
+          code: 'Enter',
+          windowsVirtualKeyCode: 13,
+          nativeVirtualKeyCode: 13
+        });
 
-            const enterUp = new KeyboardEvent('keyup', {
-              key: 'Enter',
-              code: 'Enter',
-              keyCode: 13,
-              bubbles: true,
-              cancelable: true
-            });
-            input.dispatchEvent(enterUp);
-          }
+        await this.debugger.sendCommand('Input.dispatchKeyEvent', {
+          type: 'keyUp',
+          key: 'Enter',
+          code: 'Enter',
+          windowsVirtualKeyCode: 13,
+          nativeVirtualKeyCode: 13
+        });
+      }
 
-          return { success: true };
-        } catch (e) {
-          return { success: false, error: 'Typing failed', lastError: e.message };
-        }
-      })();
-    `;
+      return { success: true };
+    } catch (e) {
+      return { 
+        success: false, 
+        error: 'Typing failed', 
+        lastError: e instanceof Error ? e.message : String(e)
+      };
+    }
+  }
 
-    return await this.view.webContents.executeJavaScript(script);
+  /**
+   * Get proper key code string for character (for CDP code property)
+   */
+  private getKeyCodeString(char: string): string {
+    // Letters
+    if (/[a-zA-Z]/.test(char)) {
+      return 'Key' + char.toUpperCase();
+    }
+    
+    // Numbers
+    if (/[0-9]/.test(char)) {
+      return 'Digit' + char;
+    }
+    
+    // Special characters
+    const specialKeys: Record<string, string> = {
+      ' ': 'Space',
+      '-': 'Minus',
+      '_': 'Underscore',
+      '=': 'Equal',
+      '+': 'Plus',
+      '[': 'BracketLeft',
+      ']': 'BracketRight',
+      '{': 'BraceLeft',
+      '}': 'BraceRight',
+      '\\': 'Backslash',
+      '|': 'Pipe',
+      ';': 'Semicolon',
+      ':': 'Colon',
+      "'": 'Quote',
+      '"': 'DoubleQuote',
+      ',': 'Comma',
+      '.': 'Period',
+      '/': 'Slash',
+      '?': 'Question',
+      '<': 'Less',
+      '>': 'Greater',
+      '`': 'Backquote',
+      '~': 'Tilde',
+      '!': 'Exclamation',
+      '@': 'At',
+      '#': 'Hash',
+      '$': 'Dollar',
+      '%': 'Percent',
+      '^': 'Caret',
+      '&': 'Ampersand',
+      '*': 'Asterisk',
+      '(': 'ParenLeft',
+      ')': 'ParenRight'
+    };
+    
+    return specialKeys[char] || 'Unidentified';
   }
 
   public async select(params: SelectParams): Promise<ToolExecutionResult> {
