@@ -6,6 +6,7 @@ import { LiveRecordingView, SessionsListView } from './recording';
 import { toast } from 'sonner';
 import { cn } from '@/renderer/lib/utils';
 import AgentView from './AgentView';
+import { Button } from '../ui/button';
 
 export function RecordingView() {
   const [recordingTab, setRecordingTab] = useState('live');
@@ -142,8 +143,101 @@ export function RecordingView() {
         />
       </TabsContent>
 
-      <TabsContent value="automation">
-        <AgentView />
+      <TabsContent value="automation" className="p-4 space-y-4">
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold mb-2">🧪 Viewport Context Extraction Tester</h3>
+            <p className="text-xs text-muted-foreground mb-4">
+              Test the new viewport-based context extraction. Results save to Desktop.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              onClick={async () => {
+                toast.info('Extracting current viewport...');
+                const result = await window.browserAPI.extractViewportContextAndDownload('current', 200);
+                if (result.success) {
+                  toast.success(`✅ Extracted ${result.elementCount} elements\nSaved to: ${result.filePath}`);
+                } else {
+                  toast.error(`❌ Failed: ${result.error}`);
+                }
+              }}
+              className="px-3 py-2 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded"
+            >
+              📍 Current Viewport
+            </Button>
+
+            <Button
+              onClick={async () => {
+                toast.info('Scrolling to top...');
+                const result = await window.browserAPI.extractViewportContextAndDownload('top', 200);
+                if (result.success) {
+                  toast.success(`✅ Extracted ${result.elementCount} elements\nSaved to: ${result.filePath}`);
+                } else {
+                  toast.error(`❌ Failed: ${result.error}`);
+                }
+              }}
+              className="px-3 py-2 text-xs bg-green-500 hover:bg-green-600 text-white rounded"
+            >
+              ⬆️ Top of Page
+            </Button>
+
+            <Button
+              onClick={async () => {
+                toast.info('Scrolling to bottom...');
+                const result = await window.browserAPI.extractViewportContextAndDownload('bottom', 200);
+                if (result.success) {
+                  toast.success(`✅ Extracted ${result.elementCount} elements\nSaved to: ${result.filePath}`);
+                } else {
+                  toast.error(`❌ Failed: ${result.error}`);
+                }
+              }}
+              className="px-3 py-2 text-xs bg-purple-500 hover:bg-purple-600 text-white rounded"
+            >
+              ⬇️ Bottom of Page
+            </Button>
+
+            <Button
+              onClick={async () => {
+                toast.info('Scrolling to position 500px...');
+                const result = await window.browserAPI.extractViewportContextAndDownload(500, 200);
+                if (result.success) {
+                  toast.success(`✅ Extracted ${result.elementCount} elements\nSaved to: ${result.filePath}`);
+                } else {
+                  toast.error(`❌ Failed: ${result.error}`);
+                }
+              }}
+              className="px-3 py-2 text-xs bg-orange-500 hover:bg-orange-600 text-white rounded"
+            >
+              📏 Position 500px
+            </Button>
+          </div>
+
+          <div className="pt-2 border-t">
+            <p className="text-xs text-muted-foreground mb-2">
+              💾 Files saved to: <code className="text-xs bg-muted px-1 py-0.5 rounded">~/Desktop/viewport-context-*.json</code>
+            </p>
+          </div>
+
+          <div className="pt-2 border-t">
+            <h4 className="text-xs font-semibold mb-2">Full Context (All Elements)</h4>
+            <Button
+              onClick={async () => {
+                toast.info('Extracting full page context...');
+                const result = await window.browserAPI.extractAndDownloadContext({ maxInteractiveElements: 200 });
+                if (result.success) {
+                  toast.success(`✅ Full context extracted\nSaved to: ${result.filePath}`);
+                } else {
+                  toast.error(`❌ Failed: ${result.error}`);
+                }
+              }}
+              className="px-3 py-2 text-xs bg-gray-600 hover:bg-gray-700 text-white rounded w-full"
+            >
+              📄 Extract Full Page (Compare)
+            </Button>
+          </div>
+        </div>
       </TabsContent>
 
       <TabsContent value="sessions" className="flex-1 m-0 p-0">

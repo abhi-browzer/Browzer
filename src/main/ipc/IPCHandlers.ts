@@ -422,6 +422,8 @@ export class IPCHandlers {
     ipcMain.removeAllListeners('context:extract');
     ipcMain.removeAllListeners('context:extract-for-tab');
     ipcMain.removeAllListeners('context:extract-and-download');
+    ipcMain.removeAllListeners('context:extract-viewport');
+    ipcMain.removeAllListeners('context:extract-viewport-and-download');
   }
 
   private setupPasswordHandlers(): void {
@@ -471,6 +473,16 @@ export class IPCHandlers {
     // Extract and download context as JSON
     ipcMain.handle('context:extract-and-download', async (_, options?: any) => {
       return await this.browserManager.extractAndDownloadContext(options);
+    });
+
+    // Extract viewport context from active tab
+    ipcMain.handle('context:extract-viewport', async (_, scrollTo?: any, maxElements?: number) => {
+      return await this.browserManager.extractViewportContext(scrollTo, maxElements);
+    });
+
+    // Extract viewport context and save to Desktop
+    ipcMain.handle('context:extract-viewport-and-download', async (_, scrollTo?: any, maxElements?: number) => {
+      return await this.browserManager.extractViewportContextAndDownload(scrollTo, maxElements);
     });
   }
 

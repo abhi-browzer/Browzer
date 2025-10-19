@@ -400,7 +400,7 @@ Letters: a, b, c (lowercase) or with Shift modifier for uppercase`
   },
   {
     name: 'extract_browser_context',
-    description: `Extract current browser and DOM context for analysis and decision-making.
+    description: `Extract current COMPLETE browser and DOM context for analysis and decision-making. Extracts all interactive elements, forms, and page state. Use ONLY when you need the whole DOM context, else prefer extract_viewport_context.
 
 **CRITICAL: This is NOT an automation tool - it's an ANALYSIS tool.**
 
@@ -433,6 +433,91 @@ This information helps you make informed decisions about:
         maxElements: {
           type: 'number',
           description: 'Maximum number of interactive elements to extract. Default: 200. Use lower values (50-100) for faster extraction.',
+          default: 200
+        }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'extract_viewport_context',
+    description: `Extract browser context from VIEWPORT ONLY - OPTIMIZED for token efficiency. Extracts only elements visible in viewport (extended 100px buffer). Use this tool by default for extracting selective context.
+
+**🎯 USE THIS TOOL INSTEAD of extract_browser_context when:**
+- You need elements from a specific section of the page
+- The page is long and you only need visible elements
+- You want to save tokens (50-90% reduction on long pages)
+- You need to analyze elements after scrolling to a section
+
+**⚡ KEY BENEFITS:**
+- **Token Efficient**: Only extracts elements visible in viewport (extended 100px buffer)
+- **Smart Scrolling**: Can scroll before extraction to target specific sections
+- **Lazy Load Support**: Waits 2-4 seconds after scroll for dynamic content
+- **Extended Viewport**: Includes partially visible elements for better context
+
+**📜 SCROLL OPTIONS:**
+1. \`scrollTo: "current"\` - Extract from current viewport (no scroll, DEFAULT)
+2. \`scrollTo: "top"\` - Scroll to page top, then extract
+3. \`scrollTo: "bottom"\` - Scroll to page bottom, then extract
+4. \`scrollTo: 500\` - Scroll to specific Y position (pixels), then extract
+5. \`scrollTo: { element: "#footer", backupSelectors: ["footer", "[role='contentinfo']"] }\` - Scroll element into view, then extract around it
+
+**🔥 COMMON USE CASES:**
+- Extract login form: \`scrollTo: "top"\`
+- Extract footer links: \`scrollTo: "bottom"\`
+- Extract specific section: \`scrollTo: { element: "#pricing", backupSelectors: ["[data-section='pricing']"] }\`
+- Extract current view: \`scrollTo: "current"\` or omit parameter
+- Extract after user scrolled: \`scrollTo: "current"\`
+
+**📝 BEST PRACTICES:**
+- Use this tool by default for long pages
+- Use extract_browser_context only when you need the whole DOM context
+- Always provide 2-4 backupSelectors when scrolling to element
+- For multi-section pages, call multiple times with different scroll positions
+- Use "current" when you just need to see what's visible now
+
+**CRITICAL: This is NOT an automation tool - it's an ANALYSIS tool.**
+Do not include this in automation plan steps. Use it to understand page state.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        scrollTo: {
+          description: `Where to scroll before extracting. Options:
+- "current" (default): Extract from current viewport, no scrolling
+- "top": Scroll to page top
+- "bottom": Scroll to page bottom  
+- number: Scroll to specific Y position in pixels (e.g., 500)
+- object: Scroll element into view, requires:
+  - element: Primary CSS selector (e.g., "#pricing-section")
+  - backupSelectors: Array of 2-4 backup selectors (REQUIRED)
+  
+Examples:
+- { "element": "#footer", "backupSelectors": ["footer", "[role='contentinfo']"] }
+- { "element": "[data-section='pricing']", "backupSelectors": ["#pricing", ".pricing-section"] }`,
+          oneOf: [
+            { type: 'string', enum: ['current', 'top', 'bottom'] },
+            { type: 'number' },
+            {
+              type: 'object',
+              properties: {
+                element: {
+                  type: 'string',
+                  description: 'Primary CSS selector for element to scroll to'
+                },
+                backupSelectors: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'REQUIRED: 2-4 backup selectors for robustness',
+                  minItems: 2
+                }
+              },
+              required: ['element', 'backupSelectors']
+            }
+          ]
+        },
+        maxElements: {
+          type: 'number',
+          description: 'Maximum number of interactive elements to extract from viewport. Default: 200. Use 50-100 for faster extraction.',
           default: 200
         }
       },

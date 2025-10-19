@@ -99,6 +99,10 @@ export interface BrowserAPI {
   extractBrowserContext: (options?: any) => Promise<any>;
   extractBrowserContextForTab: (tabId: string, options?: any) => Promise<any>;
   extractAndDownloadContext: (options?: any) => Promise<{ success: boolean; filePath?: string; error?: string }>;
+  
+  // Viewport Context Extraction
+  extractViewportContext: (scrollTo?: 'current' | 'top' | 'bottom' | number | { element: string; backupSelectors: string[] }, maxElements?: number) => Promise<any>;
+  extractViewportContextAndDownload: (scrollTo?: 'current' | 'top' | 'bottom' | number | { element: string; backupSelectors: string[] }, maxElements?: number) => Promise<{ success: boolean; filePath?: string; error?: string; elementCount?: number }>;
 
   // LLM Automation
   executeLLMAutomation: (userGoal: string, recordedSessionId: string) => Promise<{
@@ -270,6 +274,12 @@ const browserAPI: BrowserAPI = {
     ipcRenderer.invoke('context:extract-for-tab', tabId, options),
   extractAndDownloadContext: (options?: any) => 
     ipcRenderer.invoke('context:extract-and-download', options),
+  
+  // Viewport Context Extraction API
+  extractViewportContext: (scrollTo?: any, maxElements?: number) => 
+    ipcRenderer.invoke('context:extract-viewport', scrollTo, maxElements),
+  extractViewportContextAndDownload: (scrollTo?: any, maxElements?: number) => 
+    ipcRenderer.invoke('context:extract-viewport-and-download', scrollTo, maxElements),
 
   // Test Automation API
   runTestAutomation: () => 

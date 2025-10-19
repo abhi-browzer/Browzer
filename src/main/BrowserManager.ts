@@ -564,7 +564,7 @@ export class BrowserManager {
 
     // Execute automation
     try {
-      const result = await llmService.executeAutomation(userGoal, recordedSessionId);
+      const result = await llmService.executeAutomationWithRecovery(userGoal, recordedSessionId);
       
       console.log('[BrowserManager] LLM automation completed');
       console.log(`  Success: ${result.success}`);
@@ -1105,6 +1105,80 @@ export class BrowserManager {
       };
     } catch (error) {
       console.error('Failed to save context to file:', error);
+      return {
+        success: false,
+        error: (error as Error).message
+      };
+    }
+  }
+
+  /**
+   * Extract viewport context from active tab
+   */
+  public async extractViewportContext(
+    scrollTo?: 'current' | 'top' | 'bottom' | number | { element: string; backupSelectors: string[] },
+    maxElements?: number
+  ): Promise<ContextExtractionResult> {
+    const tab = this.tabs.get(this.activeTabId);
+    if (!tab || !tab.contextExtractor) {
+      return {
+        success: false,
+        error: 'No active tab or context extractor not found',
+        duration: 0
+      };
+    }
+    return await tab.contextExtractor.extractViewportContext(this.activeTabId, scrollTo, maxElements);
+  }
+
+  /**
+   * Extract viewport context and save to Desktop
+   */
+  public async extractViewportContextAndDownload(
+    scrollTo?: 'current' | 'top' | 'bottom' | number | { element: string; backupSelectors: string[] },
+    maxElements?: number
+  ): Promise<{ success: boolean; filePath?: string; error?: string; elementCount?: number }> {
+    const result = await this.extractViewportContext(scrollTo, maxElements);
+    
+    if (!result.success || !result.context) {
+      return {
+        success: false,
+        error: result.error || 'Failed to extract viewport context'
+      };
+    }
+
+    try {
+      // Save to Desktop
+      const os = await import('os');
+      const desktopPath = path.join(os.homedir(), 'Desktop');
+      
+      // Generate filename with timestamp and scroll info
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      let scrollInfo = 'current';
+      if (scrollTo === 'top' || scrollTo === 'bottom') {
+        scrollInfo = scrollTo;
+      } else if (typeof scrollTo === 'number') {
+        scrollInfo = `pos-${scrollTo}`;
+      } else if (typeof scrollTo === 'object') {
+        scrollInfo = 'element';
+      }
+      
+      const filename = `viewport-context-${scrollInfo}-${timestamp}.json`;
+      const filePath = path.join(desktopPath, filename);
+
+      // Write context to file
+      const contextJSON = JSON.stringify(result.context, null, 2);
+      await writeFile(filePath, contextJSON, 'utf-8');
+
+      const elementCount = result.context.dom.stats.interactiveElements;
+      console.log(`✅ Viewport context saved to: ${filePath} (${elementCount} elements)`);
+
+      return {
+        success: true,
+        filePath,
+        elementCount
+      };
+    } catch (error) {
+      console.error('Failed to save viewport context to file:', error);
       return {
         success: false,
         error: (error as Error).message

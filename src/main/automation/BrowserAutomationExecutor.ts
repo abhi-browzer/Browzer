@@ -80,6 +80,8 @@ export class BrowserAutomationExecutor {
         return this.submit(params as SubmitParams);
       case 'extract_browser_context':
         return this.extractBrowserContext(params as { maxElements?: number });
+      case 'extract_viewport_context':
+        return this.extractViewportContext(params);
       default:
         throw new Error(`Unknown tool: ${toolName}`);
     }
@@ -2117,5 +2119,34 @@ export class BrowserAutomationExecutor {
         }
       });
     }
+  }
+
+  /**
+   * Extract viewport context - OPTIMIZED for token efficiency
+   * Only extracts elements visible in current viewport or after scrolling
+   */
+  public async extractViewportContext(params: {
+    scrollTo?: 'current' | 'top' | 'bottom' | number | { 
+      element: string; 
+      backupSelectors: string[] 
+    };
+    maxElements?: number;
+  }): Promise<ToolExecutionResult> {
+    const startTime = Date.now();
+    const result = await this.contextExtractor.extractViewportContext(
+      this.tabId,
+      params.scrollTo,
+      params.maxElements
+    );
+    const executionTime = Date.now() - startTime;
+    return {
+      success: true,
+      toolName: 'extract_viewport_context',
+      executionTime,
+      context: result,
+      timestamp: Date.now(),
+      tabId: this.tabId,
+      url: this.view.webContents.getURL()
+    };
   }
 }
