@@ -85,9 +85,7 @@ export class LLMAutomationService {
       );
 
       // Step 4: Format recorded session for caching (if provided)
-      const cachedContext = recordedSession
-        ? SystemPromptBuilder.formatRecordedSession(recordedSession)
-        : undefined;
+      const cachedContext = SystemPromptBuilder.formatRecordedSession(recordedSession);
 
       // Step 5: Get available tools
       const tools = this.toolRegistry.getToolDefinitions();

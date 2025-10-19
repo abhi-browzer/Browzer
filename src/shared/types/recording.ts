@@ -1,63 +1,31 @@
 
 /**
- * Selector strategy with confidence score
- */
-export interface SelectorStrategy {
-  strategy: 'id' | 'data-testid' | 'data-cy' | 'aria-label' | 'role' | 'text' | 'css' | 'xpath';
-  selector: string;
-  score: number; // 0-100, higher is more reliable
-  description?: string;
-}
-
-/**
- * Enhanced target information with multiple selector strategies
+ * Optimized element target information for recorded actions
+ * Aligned with InteractiveElement from context extraction for consistency
  */
 export interface ElementTarget {
-  // Primary selector (best one)
+  // Element identification (single best selector)
   selector: string;
-  
-  // Multiple selector strategies for fallback
-  selectors?: SelectorStrategy[];
-  
-  // Element identification
   tagName: string;
-  id?: string;
-  className?: string;
-  name?: string;
-  type?: string; // input type, button type, etc.
   
-  // Semantic attributes
-  role?: string;
-  ariaLabel?: string;
-  ariaDescribedBy?: string;
-  title?: string;
-  placeholder?: string;
-  
-  // Content
+  // Semantic information
   text?: string;
   value?: string;
-  href?: string; // for links
   
-  // Data attributes (for testing)
-  dataTestId?: string;
-  dataCy?: string;
-  
-  // Visual properties
-  boundingRect?: {
+  // Visual context (simplified)
+  boundingBox?: {
     x: number;
     y: number;
     width: number;
     height: number;
-    top: number;
-    right: number;
-    bottom: number;
-    left: number;
   };
-  isVisible?: boolean;
   
-  // Computed properties
-  isInteractive?: boolean; // Is this element clickable/interactive?
-  interactiveParent?: ElementTarget; // If clicked element is non-interactive, this is the interactive parent
+  // Context and state
+  parentSelector?: string;
+  isDisabled?: boolean;
+  
+  // All element attributes (for reliable element identification)
+  attributes: Record<string, string>;
 }
 
 export interface RecordedAction {

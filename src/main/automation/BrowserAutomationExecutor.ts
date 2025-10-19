@@ -87,13 +87,17 @@ export class BrowserAutomationExecutor {
     const startTime = Date.now();
     
     try {
-      await this.ensureDebuggerAttached();
-      console.log(`[Automation] Navigating to: ${params.url}`);
-
-      await this.view.webContents.loadURL(params.url);
       const waitUntil = params.waitUntil || 'load';
       const timeout = params.timeout || 30000;
-      await this.waitForNavigation(waitUntil, timeout);
+      
+      // Set up navigation promise BEFORE calling loadURL to avoid race condition
+      const navigationPromise = this.waitForNavigation(waitUntil, timeout);
+      
+      // Start navigation
+      await this.view.webContents.loadURL(params.url);
+      
+      // Wait for navigation to complete
+      await navigationPromise;
 
       const executionTime = Date.now() - startTime;
       const currentUrl = this.view.webContents.getURL();
@@ -1846,19 +1850,40 @@ export class BrowserAutomationExecutor {
 
   private async waitForNavigation(waitUntil: string, timeout: number): Promise<void> {
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('Navigation timeout')), timeout);
+      let resolved = false;
+      
+      const timer = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          reject(new Error('Navigation timeout'));
+        }
+      }, timeout);
+      
+      const cleanup = () => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timer);
+          resolve();
+        }
+      };
       
       if (waitUntil === 'load') {
-        this.view.webContents.once('did-finish-load', () => {
-          clearTimeout(timer);
-          resolve();
+        // Listen for successful load
+        this.view.webContents.once('did-finish-load', cleanup);
+        
+        // Also handle navigation failures
+        this.view.webContents.once('did-fail-load', (event, errorCode, errorDescription) => {
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(timer);
+            reject(new Error(`Navigation failed: ${errorDescription} (code: ${errorCode})`));
+          }
         });
+      } else if (waitUntil === 'domcontentloaded') {
+        this.view.webContents.once('dom-ready', cleanup);
       } else {
-        // Simplified - just wait a bit
-        setTimeout(() => {
-          clearTimeout(timer);
-          resolve();
-        }, 1000);
+        // For 'networkidle' or other, just wait a bit
+        setTimeout(cleanup, 1000);
       }
     });
   }

@@ -143,18 +143,7 @@ export class IPCHandlers {
       try {
         const recording = this.browserManager.getRecordingStore().getRecording(id);
 
-        // Create a comprehensive export with all data
-        const exportData = {
-          recording,
-          exportedAt: Date.now(),
-          exportVersion: '1.0',
-          metadata: {
-            browserVersion: process.versions.electron,
-            platform: process.platform,
-          }
-        };
-
-        const jsonString = JSON.stringify(exportData, null, 2);
+        const jsonString = JSON.stringify(recording, null, 2);
         const fileName = `recording-${recording.name.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-${Date.now()}.json`;
 
         // Use dialog to save file

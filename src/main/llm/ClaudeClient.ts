@@ -56,7 +56,7 @@ export class ClaudeClient {
     if (cachedContext) {
       systemBlocks.push({
         type: 'text',
-        text: `\n\n<recorded_session>\n${cachedContext}\n</recorded_session>`,
+        text: `\n\n${cachedContext}`, // Already formatted with XML tags
         cache_control: { type: 'ephemeral' } // Cache the recorded session (5 min default)
       });
     }
@@ -120,12 +120,5 @@ export class ClaudeClient {
       cacheReadTokens: usage.cache_read_input_tokens || 0,
       totalCost: inputCost + outputCost + cacheWriteCost + cacheReadCost
     };
-  }
-
-  /**
-   * Check if API key is configured
-   */
-  public isConfigured(): boolean {
-    return !!process.env.ANTHROPIC_API_KEY;
   }
 }

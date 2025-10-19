@@ -33,9 +33,9 @@ You will receive:
 **CRITICAL: DO NOT BLINDLY REPLICATE THE RECORDING**
 
 The recorded session is REFERENCE MATERIAL to understand:
-- What the user's goal is
-- What selectors/elements are available on the page
-- What the final outcome should be
+- What the user's goal is and how user accomplishes it
+- What selectors/elements are available on the pages which user interacts
+- What the final outcome should be including intermediate steps/results
 
 Your job is to create the MOST OPTIMIZED automation plan that:
 ✅ Achieves the user's goal with MINIMUM steps
@@ -85,7 +85,7 @@ Your job is to create the MOST OPTIMIZED automation plan that:
 </critical_instructions>
 
 <how_to_analyze_recorded_sessions>
-When a recorded session is provided, use it INTELLIGENTLY:
+When a recorded session is provided (in XML format), use it INTELLIGENTLY:
 
 1. **Understand the GOAL, not the path:**
    - What was the user trying to accomplish? (e.g., "Create a GitHub repo")
@@ -94,22 +94,29 @@ When a recorded session is provided, use it INTELLIGENTLY:
    - Ignore HOW they did it - find the BEST way
 
 2. **Extract ONLY essential information:**
-   - Final destination URL (where did they end up?)
-   - Required form fields (what MUST be filled?)
-   - Submit action (how to finalize?)
-   - Valid selectors for these elements
+   - Final destination URL (check <page_url> in actions)
+   - Required form fields (look at <target_element> with type="input")
+   - Submit action (find click actions with effects showing navigation)
+   - Valid selectors from <selector> and <attributes>
 
 3. **Identify shortcuts:**
    - Can you navigate directly to the final page? (e.g., github.com/new instead of github.com → click new)
    - Can you skip intermediate clicks? (e.g., if a field is auto-focused, don't click it)
    - Can you combine actions? (e.g., type + pressEnter instead of type + click)
 
-4. **Extract selector strategies:**
-   - Use HIGHEST scoring selectors (id, data-testid, aria-label)
-   - AVOID React-generated IDs with colons (e.g., #:r9:)
-   - Provide 2-3 backup selectors for reliability
+4. **Use element attributes for reliable selectors:**
+   - The <attributes> section contains ALL element attributes
+   - Prioritize: id, name, type, role, aria-label, data-testid
+   - Use <parent_selector> for context when needed
+   - Build backup selectors from multiple attributes
 
-5. **Distinguish essential vs optional:**
+5. **Understand action effects:**
+   - Check <effects> to see what changed after each action
+   - Navigation effects show page transitions
+   - Network requests indicate data submission
+   - Focus changes show UI state updates
+
+6. **Distinguish essential vs optional:**
    - Essential: Actions that change data or state (type, click submit, select options)
    - Optional: Actions for viewing only (scroll to see, click tabs that auto-load)
    - Skip optional actions unless they're prerequisites
@@ -212,77 +219,153 @@ Please create a COMPLETE automation plan that accomplishes this goal. Generate A
   /**
    * Format a recorded session for inclusion in the prompt
    * 
-   * This creates a concise, LLM-friendly representation of the recording
-   * that highlights the key information needed for automation planning.
+   * Uses XML structure for clarity (Claude best practice) and leverages new
+   * element structure with attributes and parentSelector for better automation.
+   * 
+   * Key improvements:
+   * - XML tags for clear structure
+   * - Complete element attributes for reliable selector generation
+   * - Parent context for hierarchical understanding
+   * - Summarized effects for outcome understanding
+   * - Concise format optimized for prompt caching
    */
   public static formatRecordedSession(session: RecordingSession): string {
     const actions = session.actions || [];
     
-    let formatted = `# Recorded Session: ${session.name}\n\n`;
-    formatted += `**Description:** ${session.description || 'No description'}\n`;
-    formatted += `**Duration:** ${Math.round(session.duration / 1000)}s\n`;
-    formatted += `**Actions:** ${session.actionCount}\n`;
-    formatted += `**Starting URL:** ${session.url || session.tabs?.[0]?.url || 'Unknown'}\n\n`;
+    let formatted = `<recorded_session>
+<metadata>
+  <name>${session.name}</name>
+  <description>${session.description || 'No description provided'}</description>
+  <duration_seconds>${Math.round(session.duration / 1000)}</duration_seconds>
+  <total_actions>${session.actionCount}</total_actions>
+  <starting_url>${session.url || session.tabs?.[0]?.url || 'Unknown'}</starting_url>
+</metadata>\n\n`;
     
-    formatted += `## Action Sequence\n\n`;
+    formatted += `<actions>\n`;
     
     actions.forEach((action: RecordedAction, index: number) => {
-      const timestamp = new Date(action.timestamp).toISOString();
-      formatted += `### Action ${index + 1}: ${action.type.toUpperCase()}\n`;
-      formatted += `- **Time:** ${timestamp}\n`;
+      formatted += `  <action id="${index + 1}" type="${action.type}">\n`;
       
+      // Current page context
       if (action.tabUrl) {
-        formatted += `- **Page:** ${action.tabUrl}\n`;
+        formatted += `    <page_url>${this.escapeXml(action.tabUrl)}</page_url>\n`;
       }
       
+      // Target element (if applicable)
       if (action.target) {
-        formatted += `- **Target Element:**\n`;
-        formatted += `  - Tag: ${action.target.tagName}\n`;
-        formatted += `  - Primary Selector: \`${action.target.selector}\`\n`;
+        formatted += `    <target_element>\n`;
+        formatted += `      <tag>${action.target.tagName}</tag>\n`;
+        formatted += `      <selector>${this.escapeXml(action.target.selector)}</selector>\n`;
         
-        if (action.target.selectors && action.target.selectors.length > 0) {
-          formatted += `  - Selector Strategies:\n`;
-          action.target.selectors.slice(0, 5).forEach((s: any) => {
-            formatted += `    - [${s.score}] ${s.strategy}: \`${s.selector}\`\n`;
-          });
+        // Parent context for hierarchical understanding
+        if (action.target.parentSelector) {
+          formatted += `      <parent_selector>${this.escapeXml(action.target.parentSelector)}</parent_selector>\n`;
         }
         
+        // Element text/value
         if (action.target.text) {
-          formatted += `  - Text: "${action.target.text.substring(0, 50)}${action.target.text.length > 50 ? '...' : ''}"\n`;
+          const text = action.target.text.substring(0, 100);
+          formatted += `      <text>${this.escapeXml(text)}</text>\n`;
+        }
+        if (action.target.value) {
+          formatted += `      <value>${this.escapeXml(action.target.value)}</value>\n`;
         }
         
-        if (action.target.ariaLabel) {
-          formatted += `  - ARIA Label: "${action.target.ariaLabel}"\n`;
+        // Bounding box for visual context
+        if (action.target.boundingBox) {
+          const bb = action.target.boundingBox;
+          formatted += `      <position x="${bb.x}" y="${bb.y}" width="${bb.width}" height="${bb.height}" />\n`;
         }
         
-        if (action.target.placeholder) {
-          formatted += `  - Placeholder: "${action.target.placeholder}"\n`;
+        // Element state
+        if (action.target.isDisabled) {
+          formatted += `      <disabled>true</disabled>\n`;
         }
+        
+        // All element attributes (CRITICAL for selector generation)
+        if (action.target.attributes && Object.keys(action.target.attributes).length > 0) {
+          formatted += `      <attributes>\n`;
+          
+          // Prioritize important attributes first
+          const priorityAttrs = ['id', 'name', 'type', 'role', 'aria-label', 'data-testid', 'placeholder'];
+          const attrs = action.target.attributes;
+          
+          // Add priority attributes first
+          priorityAttrs.forEach(key => {
+            if (attrs[key]) {
+              formatted += `        <attr name="${key}">${this.escapeXml(attrs[key])}</attr>\n`;
+            }
+          });
+          
+          // Add remaining attributes (limit to most relevant)
+          const remainingAttrs = Object.keys(attrs)
+            .filter(key => !priorityAttrs.includes(key))
+            .filter(key => !key.startsWith('data-ved') && !key.startsWith('jsname')) // Filter noise
+            .slice(0, 10); // Limit to 10 additional attributes
+          
+          remainingAttrs.forEach(key => {
+            formatted += `        <attr name="${key}">${this.escapeXml(attrs[key])}</attr>\n`;
+          });
+          
+          formatted += `      </attributes>\n`;
+        }
+        
+        formatted += `    </target_element>\n`;
       }
       
-      if (action.value !== undefined && action.value !== null) {
-        formatted += `- **Value:** ${JSON.stringify(action.value)}\n`;
+      // Action value (for input, select, etc.)
+      if (action.value !== undefined && action.value !== null && !action.target?.value) {
+        formatted += `    <input_value>${this.escapeXml(String(action.value))}</input_value>\n`;
       }
       
+      // Click position (for reference)
+      if (action.position) {
+        formatted += `    <click_position x="${action.position.x}" y="${action.position.y}" />\n`;
+      }
+      
+      // Effects (what changed after this action)
       if (action.effects) {
-        formatted += `- **Effects:**\n`;
+        const effects = [];
+        
         if (action.effects.navigation?.occurred) {
-          formatted += `  - Navigation to: ${action.effects.navigation.url}\n`;
+          effects.push(`navigated to ${action.effects.navigation.url}`);
         }
         if (action.effects.modal?.appeared) {
-          formatted += `  - Modal appeared: ${action.effects.modal.type}\n`;
+          effects.push(`modal appeared`);
         }
         if (action.effects.focus?.changed) {
-          formatted += `  - Focus changed to: ${action.effects.focus.newFocusTagName}\n`;
+          effects.push(`focus changed to ${action.effects.focus.newFocusTagName}`);
         }
         if (action.effects.network?.requestCount > 0) {
-          formatted += `  - Network requests: ${action.effects.network.requestCount}\n`;
+          effects.push(`${action.effects.network.requestCount} network request(s)`);
+        }
+        if (action.effects.dom?.addedNodes && action.effects.dom.addedNodes > 0) {
+          effects.push(`${action.effects.dom.addedNodes} elements added`);
+        }
+        
+        if (effects.length > 0) {
+          formatted += `    <effects>${effects.join(', ')}</effects>\n`;
         }
       }
       
-      formatted += `\n`;
+      formatted += `  </action>\n\n`;
     });
     
+    formatted += `</actions>\n</recorded_session>`;
+    
     return formatted;
+  }
+
+  /**
+   * Escape XML special characters
+   */
+  private static escapeXml(str: string): string {
+    if (!str) return '';
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
   }
 }
