@@ -3,12 +3,11 @@ import path from 'node:path';
 import { ActionRecorder, VideoRecorder, RecordingStore } from '@/main/recording';
 import { HistoryService } from '@/main/history/HistoryService';
 import { PasswordManager } from '@/main/password/PasswordManager';
-import { RecordedAction, RecordingSession, HistoryTransition, RecordingTabInfo, TabInfo, ContextExtractionOptions, ContextExtractionResult } from '@/shared/types';
+import { RecordedAction, RecordingSession, HistoryTransition, RecordingTabInfo, TabInfo } from '@/shared/types';
 import { INTERNAL_PAGES } from '@/main/constants';
-import { stat, writeFile } from 'fs/promises';
+import { stat } from 'fs/promises';
 import { PasswordUtil } from '@/main/utils/PasswordUtil';
 import { PasswordAutomation, BrowserAutomationExecutor } from './automation';
-import { BrowserContextExtractor } from './context';
 import { LLMAutomationService } from './llm';
 
 // Internal tab structure (includes WebContentsView)
@@ -22,8 +21,6 @@ interface Tab {
   // Track selected credential for multi-step flows
   selectedCredentialId?: string;
   selectedCredentialUsername?: string;
-  // Context extractor for this tab
-  contextExtractor?: BrowserContextExtractor;
 }
 
 /**
@@ -138,7 +135,6 @@ export class BrowserManager {
         this.handleAutoFillPassword.bind(this)
       ),
       automationExecutor: new BrowserAutomationExecutor(view, tabId),
-      contextExtractor: new BrowserContextExtractor(view),
     };
 
     // Store tab
@@ -1035,154 +1031,6 @@ export class BrowserManager {
       
     } catch (error) {
       console.error('[BrowserManager] Error auto-filling password:', error);
-    }
-  }
-
-  /**
-   * Extract browser context from active tab
-   */
-  public async extractBrowserContext(
-    options?: ContextExtractionOptions
-  ): Promise<ContextExtractionResult> {
-    const tab = this.tabs.get(this.activeTabId);
-    return await tab.contextExtractor.extractContext(this.activeTabId, options);
-  }
-
-  /**
-   * Extract browser context from specific tab
-   */
-  public async extractBrowserContextForTab(
-    tabId: string,
-    options?: ContextExtractionOptions
-  ): Promise<ContextExtractionResult> {
-    const tab = this.tabs.get(tabId);
-    if (!tab || !tab.contextExtractor) {
-      return {
-        success: false,
-        error: 'Tab or context extractor not found',
-        duration: 0
-      };
-    }
-    return await tab.contextExtractor.extractContext(tabId, options);
-  }
-
-  /**
-   * Extract and download browser context as JSON file
-   */
-  public async extractAndDownloadContext(
-    options?: ContextExtractionOptions
-  ): Promise<{ success: boolean; filePath?: string; error?: string }> {
-    const result = await this.extractBrowserContext(options);
-    
-    if (!result.success || !result.context) {
-      return {
-        success: false,
-        error: result.error || 'Failed to extract context'
-      };
-    }
-
-    try {
-      // Save to Desktop for easy testing access
-      const os = await import('os');
-      const desktopPath = path.join(os.homedir(), 'Desktop');
-      const downloadsDir = path.join(desktopPath, 'Browzer-Context-Extractions');
-      await import('fs/promises').then(fs => fs.mkdir(downloadsDir, { recursive: true }));
-
-      // Generate filename with timestamp
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const filename = `browser-context-${timestamp}.json`;
-      const filePath = path.join(downloadsDir, filename);
-
-      // Write context to file
-      const contextJSON = JSON.stringify(result.context, null, 2);
-      await writeFile(filePath, contextJSON, 'utf-8');
-
-      console.log('✅ Browser context saved to:', filePath);
-
-      return {
-        success: true,
-        filePath
-      };
-    } catch (error) {
-      console.error('Failed to save context to file:', error);
-      return {
-        success: false,
-        error: (error as Error).message
-      };
-    }
-  }
-
-  /**
-   * Extract viewport context from active tab
-   */
-  public async extractViewportContext(
-    scrollTo?: 'current' | 'top' | 'bottom' | number | { element: string; backupSelectors: string[] },
-    maxElements?: number
-  ): Promise<ContextExtractionResult> {
-    const tab = this.tabs.get(this.activeTabId);
-    if (!tab || !tab.contextExtractor) {
-      return {
-        success: false,
-        error: 'No active tab or context extractor not found',
-        duration: 0
-      };
-    }
-    return await tab.contextExtractor.extractViewportContext(this.activeTabId, scrollTo, maxElements);
-  }
-
-  /**
-   * Extract viewport context and save to Desktop
-   */
-  public async extractViewportContextAndDownload(
-    scrollTo?: 'current' | 'top' | 'bottom' | number | { element: string; backupSelectors: string[] },
-    maxElements?: number
-  ): Promise<{ success: boolean; filePath?: string; error?: string; elementCount?: number }> {
-    const result = await this.extractViewportContext(scrollTo, maxElements);
-    
-    if (!result.success || !result.context) {
-      return {
-        success: false,
-        error: result.error || 'Failed to extract viewport context'
-      };
-    }
-
-    try {
-      // Save to Desktop
-      const os = await import('os');
-      const desktopPath = path.join(os.homedir(), 'Desktop');
-      
-      // Generate filename with timestamp and scroll info
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      let scrollInfo = 'current';
-      if (scrollTo === 'top' || scrollTo === 'bottom') {
-        scrollInfo = scrollTo;
-      } else if (typeof scrollTo === 'number') {
-        scrollInfo = `pos-${scrollTo}`;
-      } else if (typeof scrollTo === 'object') {
-        scrollInfo = 'element';
-      }
-      
-      const filename = `viewport-context-${scrollInfo}-${timestamp}.json`;
-      const filePath = path.join(desktopPath, filename);
-
-      // Write context to file
-      const contextJSON = JSON.stringify(result.context, null, 2);
-      await writeFile(filePath, contextJSON, 'utf-8');
-
-      const elementCount = result.context.dom.stats.interactiveElements;
-      console.log(`✅ Viewport context saved to: ${filePath} (${elementCount} elements)`);
-
-      return {
-        success: true,
-        filePath,
-        elementCount
-      };
-    } catch (error) {
-      console.error('Failed to save viewport context to file:', error);
-      return {
-        success: false,
-        error: (error as Error).message
-      };
     }
   }
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect, KeyboardEvent } from 'react';
-import { ArrowLeft, ArrowRight, RotateCw, X, Lock, Globe, Circle, Square, Settings, Clock, User, MoreVertical, Video, ChevronRight, ChevronLeft, Loader2, Download, Play } from 'lucide-react';
+import { ArrowLeft, ArrowRight, RotateCw, X, Lock, Globe, Circle, Square, Settings, Clock, User, MoreVertical, Video, ChevronRight, ChevronLeft, Loader2 } from 'lucide-react';
 import type { TabInfo } from '@/shared/types';
 import { cn } from '@/renderer/lib/utils';
 import { useSidebarStore } from '@/renderer/store/useSidebarStore';
@@ -36,8 +36,6 @@ export function NavigationBar({
   const [isEditing, setIsEditing] = useState(false);
   const { isVisible: isSidebarVisible, toggleSidebar } = useSidebarStore();
   const { isRecording, isLoading, toggleRecording } = useRecording();
-  const [isExtractingContext, setIsExtractingContext] = useState(false);
-  const [isRunningTest, setIsRunningTest] = useState(false);
 
   // Update URL input when active tab changes
   useEffect(() => {
@@ -55,51 +53,6 @@ export function NavigationBar({
       setUrlInput(activeTab?.url || '');
       setIsEditing(false);
       (e.target as HTMLInputElement).blur();
-    }
-  };
-
-  const handleExtractContext = async () => {
-    try {
-      setIsExtractingContext(true);
-      const result = await window.browserAPI.extractAndDownloadContext();
-      
-      if (result.success) {
-        console.log('Context extracted successfully:', result.filePath);
-      } else {
-        console.error('Context extraction failed:', result.error);
-      }
-    } catch (error) {
-      console.error('Error extracting context:', error);
-    } finally {
-      setIsExtractingContext(false);
-    }
-  };
-
-  const handleRunTestAutomation = async () => {
-    try {
-      setIsRunningTest(true);
-      console.log('🧪 Starting test automation...');
-      
-      const result = await window.browserAPI.runTestAutomation();
-      
-      if (result.success) {
-        console.log('✅ Test automation completed successfully!');
-        console.log('Summary:', result.summary);
-        console.log('Total actions:', result.totalActions);
-        console.log('Successful:', result.successfulActions);
-        console.log('Failed:', result.failedActions);
-        console.log('Results:', result.results);
-        
-        alert(`✅ Test Automation Completed!\n\n${result.summary}\n\nTotal Actions: ${result.totalActions}\nSuccessful: ${result.successfulActions}\nFailed: ${result.failedActions}`);
-      } else {
-        console.error('❌ Test automation failed:', result.error);
-        alert(`❌ Test Automation Failed\n\n${result.error}`);
-      }
-    } catch (error) {
-      console.error('Error running test automation:', error);
-      alert(`❌ Error running test automation\n\n${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      setIsRunningTest(false);
     }
   };
 
@@ -215,34 +168,6 @@ export function NavigationBar({
           <DropdownMenuItem onClick={() => onNavigate('browzer://history')}>
             <Clock className="w-4 h-4 mr-2" />
             History
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={handleExtractContext} disabled={isExtractingContext}>
-            {isExtractingContext ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Extracting...
-              </>
-            ) : (
-              <>
-                <Download className="mr-2 h-4 w-4" />
-                Extract Context
-              </>
-            )}
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={handleRunTestAutomation} disabled={isRunningTest}>
-            {isRunningTest ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Running Test...
-              </>
-            ) : (
-              <>
-                <Play className="mr-2 h-4 w-4" />
-                Run Test Automation
-              </>
-            )}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => onNavigate('browzer://profile')}>

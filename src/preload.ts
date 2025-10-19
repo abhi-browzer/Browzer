@@ -95,15 +95,6 @@ export interface BrowserAPI {
   getMostVisited: (limit?: number) => Promise<HistoryEntry[]>;
   getRecentlyVisited: (limit?: number) => Promise<HistoryEntry[]>;
 
-  // Context Extraction
-  extractBrowserContext: (options?: any) => Promise<any>;
-  extractBrowserContextForTab: (tabId: string, options?: any) => Promise<any>;
-  extractAndDownloadContext: (options?: any) => Promise<{ success: boolean; filePath?: string; error?: string }>;
-  
-  // Viewport Context Extraction
-  extractViewportContext: (scrollTo?: 'current' | 'top' | 'bottom' | number | { element: string; backupSelectors: string[] }, maxElements?: number) => Promise<any>;
-  extractViewportContextAndDownload: (scrollTo?: 'current' | 'top' | 'bottom' | number | { element: string; backupSelectors: string[] }, maxElements?: number) => Promise<{ success: boolean; filePath?: string; error?: string; elementCount?: number }>;
-
   // LLM Automation
   executeLLMAutomation: (userGoal: string, recordedSessionId: string) => Promise<{
     success: boolean;
@@ -112,9 +103,6 @@ export interface BrowserAPI {
     executionResults?: any[];
     usage?: any;
   }>;
-
-  // Test Automation
-  runTestAutomation: () => Promise<{ success: boolean; summary: string; results: any[]; totalActions: number; successfulActions?: number; failedActions?: number; error?: string }>;
 
   // Event listeners
   onTabsUpdated: (callback: (data: { tabs: TabInfo[]; activeTabId: string | null }) => void) => () => void;
@@ -266,24 +254,6 @@ const browserAPI: BrowserAPI = {
     ipcRenderer.invoke('password:add-to-blacklist', origin),
   isSiteBlacklisted: (origin: string) => 
     ipcRenderer.invoke('password:is-blacklisted', origin),
-
-  // Context Extraction API
-  extractBrowserContext: (options?: any) => 
-    ipcRenderer.invoke('context:extract', options),
-  extractBrowserContextForTab: (tabId: string, options?: any) => 
-    ipcRenderer.invoke('context:extract-for-tab', tabId, options),
-  extractAndDownloadContext: (options?: any) => 
-    ipcRenderer.invoke('context:extract-and-download', options),
-  
-  // Viewport Context Extraction API
-  extractViewportContext: (scrollTo?: any, maxElements?: number) => 
-    ipcRenderer.invoke('context:extract-viewport', scrollTo, maxElements),
-  extractViewportContextAndDownload: (scrollTo?: any, maxElements?: number) => 
-    ipcRenderer.invoke('context:extract-viewport-and-download', scrollTo, maxElements),
-
-  // Test Automation API
-  runTestAutomation: () => 
-    ipcRenderer.invoke('automation:run-test'),
 
   // LLM Automation API
   executeLLMAutomation: (userGoal: string, recordedSessionId: string) =>

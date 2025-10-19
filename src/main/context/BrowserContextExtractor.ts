@@ -136,12 +136,9 @@ export class BrowserContextExtractor {
     return result.result.value as DOMContext;
   }
 
-  /**
-   * Extract viewport context - only elements visible in current viewport
-   * Optimized for token efficiency by extracting only what user can see
-   */
-  public async extractViewportContext(
+  public async extractSmartContext(
     tabId: string,
+    full = false,
     scrollTo?: 'current' | 'top' | 'bottom' | number | { element: string; backupSelectors?: string[] },
     maxElements = 200
   ): Promise<ContextExtractionResult> {
@@ -151,16 +148,31 @@ export class BrowserContextExtractor {
       // Attach debugger if not already attached
       const wasAttached = await this.ensureDebuggerAttached();
 
-      // Perform scroll if requested
-      if (scrollTo && scrollTo !== 'current') {
-        await this.performScroll(scrollTo);
-        
-        // Wait for scroll animations and lazy-loaded content
-        await this.sleep(2000);
-      }
+      let dom: DOMContext;
 
-      // Extract viewport-specific DOM context
-      const dom = await this.extractViewportDOMContext(maxElements);
+      if (full) {
+        // Extract full page context (all elements)
+        console.log('[Context] Extracting FULL page context...');
+        dom = await this.extractDOMContext({ 
+          includeDOM: true, 
+          maxInteractiveElements: maxElements, 
+          timeout: 10000 
+        });
+      } else {
+        // Extract viewport context only
+        console.log('[Context] Extracting VIEWPORT context...');
+        
+        // Perform scroll if requested
+        if (scrollTo && scrollTo !== 'current') {
+          await this.performScroll(scrollTo);
+          
+          // Wait for scroll animations and lazy-loaded content
+          await this.sleep(2000);
+        }
+
+        // Extract viewport-specific DOM context
+        dom = await this.extractViewportDOMContext(maxElements);
+      }
 
       // Get basic page info
       const url = this.view.webContents.getURL();
@@ -180,7 +192,8 @@ export class BrowserContextExtractor {
       }
 
       const duration = Date.now() - startTime;
-      console.log(`✅ Viewport context extracted in ${duration}ms (${dom.stats.interactiveElements} elements)`);
+      const contextType = full ? 'FULL' : 'VIEWPORT';
+      console.log(`✅ ${contextType} context extracted in ${duration}ms (${dom.stats.interactiveElements} elements)`);
 
       return {
         success: true,
@@ -189,7 +202,7 @@ export class BrowserContextExtractor {
       };
 
     } catch (error) {
-      console.error('Failed to extract viewport context:', error);
+      console.error('Failed to extract context:', error);
       
       // Try to detach debugger on error
       try {

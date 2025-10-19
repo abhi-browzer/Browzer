@@ -399,101 +399,70 @@ Letters: a, b, c (lowercase) or with Shift modifier for uppercase`
     }
   },
   {
-    name: 'extract_browser_context',
-    description: `Extract current COMPLETE browser and DOM context for analysis and decision-making. Extracts all interactive elements, forms, and page state. Use ONLY when you need the whole DOM context, else prefer extract_viewport_context.
+    name: 'extract_context',
+    description: `Extract browser and DOM context for analysis and decision-making.
 
 **CRITICAL: This is NOT an automation tool - it's an ANALYSIS tool.**
 
-Use this tool when you need to:
-- Understand the current page state after an error
-- Analyze what elements are available on the current page
-- Determine the next best action based on current browser state
-- Verify if expected elements/changes appeared after an action
+**🎯 TWO EXTRACTION MODES:**
 
-**DO NOT include this in your automation plan steps.** This tool should only be called:
-- When you encounter an error and need to understand the current state
-- When you need to verify the page state before deciding next steps
-- During error recovery to analyze what went wrong
+1. **VIEWPORT MODE (default, full=false)** - Token efficient, extracts only visible elements
+   - Extracts elements in current viewport only
+   - 50-90% token reduction on long pages
+   - Can scroll before extraction to target specific sections
+   - Best for most use cases
 
-The tool returns:
-- All interactive elements (buttons, inputs, links, etc.) with their selectors and attributes
-- Form structures with fields
-- Current page URL and title
-- Element positions and visibility
-- Statistics about page elements
+2. **FULL MODE (full=true)** - Complete page extraction
+   - Extracts ALL interactive elements from entire page
+   - Use only when you need complete page context
+   - Ignores other parameters
 
-This information helps you make informed decisions about:
-- Which selectors to use for automation
-- Whether expected elements are present
-- What actions are possible in the current state
-- How to recover from errors`,
-    input_schema: {
-      type: 'object',
-      properties: {
-        maxElements: {
-          type: 'number',
-          description: 'Maximum number of interactive elements to extract. Default: 200. Use lower values (50-100) for faster extraction.',
-          default: 200
-        }
-      },
-      required: []
-    }
-  },
-  {
-    name: 'extract_viewport_context',
-    description: `Extract browser context from VIEWPORT ONLY - OPTIMIZED for token efficiency. Extracts only elements visible in viewport (extended 100px buffer). Use this tool by default for extracting selective context.
-
-**🎯 USE THIS TOOL INSTEAD of extract_browser_context when:**
-- You need elements from a specific section of the page
-- The page is long and you only need visible elements
-- You want to save tokens (50-90% reduction on long pages)
-- You need to analyze elements after scrolling to a section
-
-**⚡ KEY BENEFITS:**
-- **Token Efficient**: Only extracts elements visible in viewport (extended 100px buffer)
-- **Smart Scrolling**: Can scroll before extraction to target specific sections
-- **Lazy Load Support**: Waits 2-4 seconds after scroll for dynamic content
-- **Extended Viewport**: Includes partially visible elements for better context
-
-**📜 SCROLL OPTIONS:**
-1. \`scrollTo: "current"\` - Extract from current viewport (no scroll, DEFAULT)
-2. \`scrollTo: "top"\` - Scroll to page top, then extract
-3. \`scrollTo: "bottom"\` - Scroll to page bottom, then extract
-4. \`scrollTo: 500\` - Scroll to specific Y position (pixels), then extract
-5. \`scrollTo: { element: "#footer", backupSelectors: ["footer", "[role='contentinfo']"] }\` - Scroll element into view, then extract around it
+**📜 SCROLL OPTIONS (viewport mode only):**
+1. \`scrollTo: "current"\` - Extract current viewport (DEFAULT)
+2. \`scrollTo: "top"\` - Scroll to top, then extract
+3. \`scrollTo: "bottom"\` - Scroll to bottom, then extract
+4. \`scrollTo: 500\` - Scroll to Y position, then extract
+5. \`scrollTo: { element: "#section", backupSelectors: [...] }\` - Scroll to element, then extract
 
 **🔥 COMMON USE CASES:**
-- Extract login form: \`scrollTo: "top"\`
-- Extract footer links: \`scrollTo: "bottom"\`
-- Extract specific section: \`scrollTo: { element: "#pricing", backupSelectors: ["[data-section='pricing']"] }\`
-- Extract current view: \`scrollTo: "current"\` or omit parameter
-- Extract after user scrolled: \`scrollTo: "current"\`
+- Extract login form: \`{ scrollTo: "top" }\`
+- Extract footer: \`{ scrollTo: "bottom" }\`
+- Extract specific section: \`{ scrollTo: { element: "#pricing", backupSelectors: [".pricing"] } }\`
+- Extract current view: \`{}\` or \`{ scrollTo: "current" }\`
+- Extract full page: \`{ full: true }\`
 
 **📝 BEST PRACTICES:**
-- Use this tool by default for long pages
-- Use extract_browser_context only when you need the whole DOM context
+- Default to viewport mode (full=false) for token efficiency
+- Use full=true only when you need complete page context
 - Always provide 2-4 backupSelectors when scrolling to element
-- For multi-section pages, call multiple times with different scroll positions
-- Use "current" when you just need to see what's visible now
+- For multi-section pages, call multiple times with different scrollTo values
 
-**CRITICAL: This is NOT an automation tool - it's an ANALYSIS tool.**
-Do not include this in automation plan steps. Use it to understand page state.`,
+**DO NOT include this in automation plan steps.** Use it to:
+- Understand page state after errors
+- Analyze available elements
+- Verify expected elements appeared
+- Decide next actions based on current state`,
     input_schema: {
       type: 'object',
       properties: {
+        full: {
+          type: 'boolean',
+          description: 'If true, extract FULL page context (all elements). If false (default), extract VIEWPORT only (visible elements). Use false for token efficiency.',
+          default: false
+        },
         scrollTo: {
-          description: `Where to scroll before extracting. Options:
-- "current" (default): Extract from current viewport, no scrolling
+          description: `Where to scroll before extracting (ignored if full=true). Options:
+- "current" (default): Extract current viewport, no scrolling
 - "top": Scroll to page top
 - "bottom": Scroll to page bottom  
-- number: Scroll to specific Y position in pixels (e.g., 500)
+- number: Scroll to Y position in pixels (e.g., 500)
 - object: Scroll element into view, requires:
-  - element: Primary CSS selector (e.g., "#pricing-section")
+  - element: Primary CSS selector
   - backupSelectors: Array of 2-4 backup selectors (REQUIRED)
   
 Examples:
 - { "element": "#footer", "backupSelectors": ["footer", "[role='contentinfo']"] }
-- { "element": "[data-section='pricing']", "backupSelectors": ["#pricing", ".pricing-section"] }`,
+- { "element": "#pricing", "backupSelectors": [".pricing-section", "[data-section='pricing']"] }`,
           oneOf: [
             { type: 'string', enum: ['current', 'top', 'bottom'] },
             { type: 'number' },
@@ -517,7 +486,7 @@ Examples:
         },
         maxElements: {
           type: 'number',
-          description: 'Maximum number of interactive elements to extract from viewport. Default: 200. Use 50-100 for faster extraction.',
+          description: 'Maximum number of interactive elements to extract. Default: 200. Use 50-100 for faster extraction.',
           default: 200
         }
       },

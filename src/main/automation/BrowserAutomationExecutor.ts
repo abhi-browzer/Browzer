@@ -81,10 +81,8 @@ export class BrowserAutomationExecutor {
         return this.scroll(params as ScrollParams);
       case 'submit':
         return this.submit(params as SubmitParams);
-      case 'extract_browser_context':
-        return this.extractBrowserContext(params as { maxElements?: number });
-      case 'extract_viewport_context':
-        return this.extractViewportContext(params);
+      case 'extract_context':
+        return this.extractContext(params);
       case 'capture_viewport_snapshot':
         return this.captureViewportSnapshot(params);
       default:
@@ -2054,121 +2052,97 @@ export class BrowserAutomationExecutor {
     return keyCodes[key] || 0;
   }
 
-  /**
-   * Extract browser context - Analysis tool for error recovery
-   * 
-   * This tool extracts the current browser state including:
-   * - All interactive elements with selectors and attributes
-   * - Form structures
-   * - Page metadata
-   * 
-   * This is NOT an automation tool - it's for analysis and decision-making.
-   */
-  public async extractBrowserContext(params: { maxElements?: number }): Promise<ToolExecutionResult> {
-    const startTime = Date.now();
+  
+/**
+ * Extract context - Unified method for both full and viewport extraction
+ */
+public async extractContext(params: {
+  full?: boolean;
+  scrollTo?: 'current' | 'top' | 'bottom' | number | { 
+    element: string; 
+    backupSelectors: string[] 
+  };
+  maxElements?: number;
+}): Promise<ToolExecutionResult> {
+  const startTime = Date.now();
 
-    try {
-      console.log('[Automation] 🔍 Extracting browser context...');
+  try {
+    const full = params.full ?? false;
+    const maxElements = params.maxElements ?? 200;
+    const contextType = full ? 'FULL' : 'VIEWPORT';
 
-      const maxElements = params.maxElements || 200;
+    console.log(`[Automation] 🔍 Extracting ${contextType} context...`);
 
-      // Extract context using BrowserContextExtractor
-      const result = await this.contextExtractor.extractContext(this.tabId, {
-        includeDOM: true,
-        maxInteractiveElements: maxElements,
-        timeout: 10000
-      });
+    // Use unified smart context extraction
+    const result = await this.contextExtractor.extractSmartContext(
+      this.tabId,
+      full,
+      params.scrollTo,
+      maxElements
+    );
 
-      if (!result.success || !result.context) {
-        return this.createErrorResult('extract_browser_context', startTime, {
-          code: 'EXECUTION_ERROR',
-          message: result.error || 'Failed to extract browser context',
-          details: {
-            lastError: result.error,
-            suggestions: [
-              'Page may still be loading',
-              'Try again after waiting for page to stabilize',
-              'Check if page has JavaScript errors'
-            ]
-          }
-        });
-      }
-
-      const context = result.context;
-      const executionTime = Date.now() - startTime;
-
-      console.log(`[Automation] ✅ Context extracted: ${context.dom.stats.interactiveElements} interactive elements`);
-
-      // Return context as tool result
-      return {
-        success: true,
-        toolName: 'extract_browser_context',
-        executionTime,
-        context,
-        timestamp: Date.now(),
-        tabId: this.tabId,
-        url: context.url
-      };
-
-    } catch (error) {
-      return this.createErrorResult('extract_browser_context', startTime, {
+    if (!result.success || !result.context) {
+      return this.createErrorResult('extract_context', startTime, {
         code: 'EXECUTION_ERROR',
-        message: `Context extraction failed: ${error instanceof Error ? error.message : String(error)}`,
+        message: result.error || 'Failed to extract context',
         details: {
-          lastError: error instanceof Error ? error.message : String(error),
+          lastError: result.error,
           suggestions: [
-            'Page may be in an unstable state',
-            'Try waiting before extracting context',
-            'Check browser console for errors'
+            'Page may still be loading',
+            full ? 'Try with full=false for viewport-only extraction' : 'Try with full=true for complete page context',
+            'If scrolling to element, verify selector is correct',
+            'Check if page has JavaScript errors'
           ]
         }
       });
     }
-  }
 
-  /**
-   * Extract viewport context - OPTIMIZED for token efficiency
-   * Only extracts elements visible in current viewport or after scrolling
-   */
-  public async extractViewportContext(params: {
-    scrollTo?: 'current' | 'top' | 'bottom' | number | { 
-      element: string; 
-      backupSelectors: string[] 
-    };
-    maxElements?: number;
-  }): Promise<ToolExecutionResult> {
-    const startTime = Date.now();
-    const result = await this.contextExtractor.extractViewportContext(
-      this.tabId,
-      params.scrollTo,
-      params.maxElements
-    );
+    const context = result.context;
     const executionTime = Date.now() - startTime;
+
+    console.log(`[Automation] ✅ ${contextType} context extracted: ${context.dom.stats.interactiveElements} elements (${executionTime}ms)`);
+
+    // Return context as tool result
     return {
       success: true,
-      toolName: 'extract_viewport_context',
+      toolName: 'extract_context',
       executionTime,
-      context: result,
+      context,
       timestamp: Date.now(),
       tabId: this.tabId,
-      url: this.view.webContents.getURL()
+      url: context.url
     };
+
+  } catch (error) {
+    return this.createErrorResult('extract_context', startTime, {
+      code: 'EXECUTION_ERROR',
+      message: `Context extraction failed: ${error instanceof Error ? error.message : String(error)}`,
+      details: {
+        lastError: error instanceof Error ? error.message : String(error),
+        suggestions: [
+          'Page may be in an unstable state',
+          'Try waiting before extracting context',
+          'Check browser console for errors'
+        ]
+      }
+    });
   }
+}
 
-  /**
-   * Capture viewport snapshot - Visual screenshot for Claude vision analysis
-   * Returns base64-encoded JPEG optimized for Claude's vision capabilities
-   */
-  public async captureViewportSnapshot(params: {
-    scrollTo?: 'current' | 'top' | 'bottom' | number | { 
-      element: string; 
-      backupSelectors: string[] 
-    };
-  }): Promise<ToolExecutionResult> {
-    const startTime = Date.now();
+/**
+ * Capture viewport snapshot - Visual screenshot for Claude vision analysis
+ * Returns base64-encoded JPEG optimized for Claude's vision capabilities
+ */
+public async captureViewportSnapshot(params: {
+  scrollTo?: 'current' | 'top' | 'bottom' | number | { 
+    element: string; 
+    backupSelectors: string[] 
+  };
+}): Promise<ToolExecutionResult> {
+  const startTime = Date.now();
 
-    try {
-      console.log('[Automation] 📸 Capturing viewport snapshot...');
+  try {
+    console.log('[Automation] 📸 Capturing viewport snapshot...');
 
       const scrollTo = params.scrollTo || 'current';
 
