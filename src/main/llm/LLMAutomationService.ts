@@ -6,6 +6,7 @@ import { ToolRegistry } from '../automation/ToolRegistry';
 import { BrowserAutomationExecutor } from '../automation/BrowserAutomationExecutor';
 import { RecordingSession } from '@/shared/types/recording';
 import { RecordingStore } from '../recording';
+import { IterativeAutomationService, IterativeAutomationResult } from './IterativeAutomationService';
 
 /**
  * Result of LLM automation execution
@@ -203,6 +204,56 @@ export class LLMAutomationService {
     }
 
     return results;
+  }
+
+  /**
+   * Execute automation with Smart ReAct error recovery
+   * 
+   * This method uses the IterativeAutomationService for error-driven recovery.
+   * The automation will:
+   * 1. Generate an initial plan
+   * 2. Execute steps one by one
+   * 3. On error: pause, extract browser context, ask Claude for recovery
+   * 4. Continue with updated plan
+   * 5. Repeat until success or max recovery attempts
+   * 
+   * @param userGoal - What the user wants to automate
+   * @param recordedSessionId - Optional recorded session as reference
+   * @param maxRecoveryAttempts - Maximum error recovery attempts (default: 3)
+   * @returns Automation result with recovery information
+   */
+  public async executeAutomationWithRecovery(
+    userGoal: string,
+    recordedSessionId: string,
+    maxRecoveryAttempts = 3
+  ): Promise<IterativeAutomationResult> {
+    console.log('[LLMAutomationService] Starting automation with Smart ReAct recovery...');
+    console.log(`  Goal: ${userGoal}`);
+    console.log(`  Max recovery attempts: ${maxRecoveryAttempts}`);
+
+    // Create iterative automation service
+    const iterativeService = new IterativeAutomationService(
+      this.executor,
+      this.recordingStore,
+      process.env.ANTHROPIC_API_KEY
+    );
+
+    // Execute with recovery
+    const result = await iterativeService.executeAutomation(
+      userGoal,
+      recordedSessionId,
+      maxRecoveryAttempts
+    );
+
+    console.log('[LLMAutomationService] Automation completed');
+    console.log(`  Success: ${result.success}`);
+    console.log(`  Recovery attempts: ${result.recoveryAttempts}`);
+    console.log(`  Total steps executed: ${result.totalStepsExecuted}`);
+    if (result.usage) {
+      console.log(`  Cost: $${result.usage.totalCost.toFixed(4)}`);
+    }
+
+    return result;
   }
 
   /**

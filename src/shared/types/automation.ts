@@ -203,6 +203,7 @@ export interface ToolExecutionResult {
   element?: FoundElement; // Element that was acted upon
   effects?: ExecutionEffects; // What happened after the action
   value?: any; // Return value (e.g., extracted text, attribute value)
+  context?: any; // Return value (e.g., extracted text, attribute value)
   
   // Error data
   error?: AutomationError;

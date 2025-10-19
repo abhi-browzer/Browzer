@@ -392,6 +392,47 @@ Letters: a, b, c (lowercase) or with Shift modifier for uppercase`
       },
       required: []
     }
+  },
+  {
+    name: 'extract_browser_context',
+    description: `Extract current browser and DOM context for analysis and decision-making.
+
+**CRITICAL: This is NOT an automation tool - it's an ANALYSIS tool.**
+
+Use this tool when you need to:
+- Understand the current page state after an error
+- Analyze what elements are available on the current page
+- Determine the next best action based on current browser state
+- Verify if expected elements/changes appeared after an action
+
+**DO NOT include this in your automation plan steps.** This tool should only be called:
+- When you encounter an error and need to understand the current state
+- When you need to verify the page state before deciding next steps
+- During error recovery to analyze what went wrong
+
+The tool returns:
+- All interactive elements (buttons, inputs, links, etc.) with their selectors and attributes
+- Form structures with fields
+- Current page URL and title
+- Element positions and visibility
+- Statistics about page elements
+
+This information helps you make informed decisions about:
+- Which selectors to use for automation
+- Whether expected elements are present
+- What actions are possible in the current state
+- How to recover from errors`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        maxElements: {
+          type: 'number',
+          description: 'Maximum number of interactive elements to extract. Default: 200. Use lower values (50-100) for faster extraction.',
+          default: 200
+        }
+      },
+      required: []
+    }
   }
 ];
 
