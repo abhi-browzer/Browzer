@@ -1,4 +1,4 @@
-import { Video, MousePointerClick, Download, Loader2Icon, Camera } from 'lucide-react';
+import { Video, MousePointerClick, Download, Loader2Icon, Camera, FileJson } from 'lucide-react';
 import type { RecordingSession } from '@/shared/types';
 import { Button } from '@/renderer/ui/button';
 import { Badge } from '@/renderer/ui/badge';
@@ -12,6 +12,7 @@ interface RecordingDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onOpenVideo: (videoPath: string) => void;
+  onExport: (id: string) => void;
 }
 
 export function RecordingDialog({ 
@@ -19,7 +20,8 @@ export function RecordingDialog({
   videoUrl, 
   open, 
   onOpenChange,
-  onOpenVideo 
+  onOpenVideo,
+  onExport
 }: RecordingDialogProps) {
   if (!recording) return null;
 
@@ -148,6 +150,10 @@ export function RecordingDialog({
         </div>
 
         <DialogFooter className="px-6 py-4 border-t bg-slate-50 dark:bg-slate-900">
+          <Button onClick={() => onExport(recording.id)} variant="outline">
+            <FileJson className="w-4 h-4 mr-2" />
+            Export as JSON
+          </Button>
           {recording.videoPath && (
             <Button onClick={() => onOpenVideo(recording.videoPath || '')} variant="outline">
               <Download className="w-4 h-4 mr-2" />

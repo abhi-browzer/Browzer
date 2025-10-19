@@ -47,6 +47,7 @@ export interface BrowserAPI {
   deleteRecording: (id: string) => Promise<boolean>;
   isRecording: () => Promise<boolean>;
   getRecordedActions: () => Promise<any[]>;
+  exportRecording: (id: string) => Promise<{ success: boolean; filePath?: string; error?: string; cancelled?: boolean }>;
   
   // Video File Operations
   openVideoFile: (videoPath: string) => Promise<void>;
@@ -99,6 +100,15 @@ export interface BrowserAPI {
   extractBrowserContextForTab: (tabId: string, options?: any) => Promise<any>;
   extractAndDownloadContext: (options?: any) => Promise<{ success: boolean; filePath?: string; error?: string }>;
 
+  // LLM Automation
+  executeLLMAutomation: (userGoal: string, recordedSessionId: string) => Promise<{
+    success: boolean;
+    error?: string;
+    plan?: any;
+    executionResults?: any[];
+    usage?: any;
+  }>;
+
   // Test Automation
   runTestAutomation: () => Promise<{ success: boolean; summary: string; results: any[]; totalActions: number; successfulActions?: number; failedActions?: number; error?: string }>;
 
@@ -141,6 +151,7 @@ const browserAPI: BrowserAPI = {
   deleteRecording: (id: string) => ipcRenderer.invoke('browser:delete-recording', id),
   isRecording: () => ipcRenderer.invoke('browser:is-recording'),
   getRecordedActions: () => ipcRenderer.invoke('browser:get-recorded-actions'),
+  exportRecording: (id: string) => ipcRenderer.invoke('browser:export-recording', id),
 
   onTabsUpdated: (callback) => {
     const subscription = (_event: Electron.IpcRendererEvent, data: { tabs: TabInfo[]; activeTabId: string | null }) => callback(data);
@@ -263,6 +274,10 @@ const browserAPI: BrowserAPI = {
   // Test Automation API
   runTestAutomation: () => 
     ipcRenderer.invoke('automation:run-test'),
+
+  // LLM Automation API
+  executeLLMAutomation: (userGoal: string, recordedSessionId: string) =>
+    ipcRenderer.invoke('automation:execute-llm', userGoal, recordedSessionId),
 };
 
 contextBridge.exposeInMainWorld('browserAPI', browserAPI);

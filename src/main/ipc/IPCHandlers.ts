@@ -120,7 +120,7 @@ export class IPCHandlers {
 
     // Get all recordings
     ipcMain.handle('browser:get-all-recordings', async () => {
-      return this.browserManager.getAllRecordings();
+      return this.browserManager.getRecordingStore().getAllRecordings();
     });
 
     // Delete recording
@@ -136,6 +136,52 @@ export class IPCHandlers {
     // Get recorded actions
     ipcMain.handle('browser:get-recorded-actions', async () => {
       return this.browserManager.getRecordedActions();
+    });
+
+    // Export recording as JSON
+    ipcMain.handle('browser:export-recording', async (_, id: string) => {
+      try {
+        const recording = this.browserManager.getRecordingStore().getRecording(id);
+
+        // Create a comprehensive export with all data
+        const exportData = {
+          recording,
+          exportedAt: Date.now(),
+          exportVersion: '1.0',
+          metadata: {
+            browserVersion: process.versions.electron,
+            platform: process.platform,
+          }
+        };
+
+        const jsonString = JSON.stringify(exportData, null, 2);
+        const fileName = `recording-${recording.name.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-${Date.now()}.json`;
+
+        // Use dialog to save file
+        const { dialog } = await import('electron');
+        const { filePath } = await dialog.showSaveDialog({
+          title: 'Export Recording',
+          defaultPath: fileName,
+          filters: [
+            { name: 'JSON Files', extensions: ['json'] },
+            { name: 'All Files', extensions: ['*'] }
+          ]
+        });
+
+        if (filePath) {
+          const { writeFile } = await import('fs/promises');
+          await writeFile(filePath, jsonString, 'utf-8');
+          return { success: true, filePath };
+        }
+
+        return { success: false, cancelled: true };
+      } catch (error) {
+        console.error('Failed to export recording:', error);
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        };
+      }
     });
     
     // Video file operations
@@ -336,6 +382,7 @@ export class IPCHandlers {
     ipcMain.removeAllListeners('browser:delete-recording');
     ipcMain.removeAllListeners('browser:is-recording');
     ipcMain.removeAllListeners('browser:get-recorded-actions');
+    ipcMain.removeAllListeners('browser:export-recording');
     ipcMain.removeAllListeners('settings:get-all');
     ipcMain.removeAllListeners('settings:get-category');
     ipcMain.removeAllListeners('settings:update');
@@ -474,6 +521,31 @@ export class IPCHandlers {
 
       } catch (error) {
         console.error('[IPC] Test automation error:', error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        };
+      }
+    });
+
+    // Execute LLM-powered automation
+    ipcMain.handle('automation:execute-llm', async (_, userGoal: string, recordedSessionId: string) => {
+      try {
+        console.log('[IPC] Executing LLM automation...');
+        console.log(`  Goal: ${userGoal}`);
+        console.log(`  Recording ID: ${recordedSessionId}`);
+
+        const result = await this.browserManager.executeLLMAutomation(userGoal, recordedSessionId);
+
+        console.log('[IPC] LLM automation completed:', result.success ? '✅ SUCCESS' : '❌ FAILED');
+        if (result.usage) {
+          console.log(`[IPC] Cost: $${(result.usage as any).totalCost?.toFixed(4) || '0.0000'}`);
+        }
+
+        return result;
+
+      } catch (error) {
+        console.error('[IPC] LLM automation error:', error);
         return {
           success: false,
           error: error instanceof Error ? error.message : 'Unknown error'

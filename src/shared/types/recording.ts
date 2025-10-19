@@ -83,6 +83,10 @@ export interface RecordedAction {
   verified?: boolean;
   verificationTime?: number;
   effects?: ClickEffects;
+  
+  // LLM-friendly context (optional, can be added during analysis)
+  intent?: string; // What the user was trying to do (e.g., "Enter username", "Submit form")
+  expectedOutcome?: string; // What should happen (e.g., "Navigate to dashboard", "Show success message")
 }
 
 /**
@@ -217,4 +221,9 @@ export interface RecordingSession {
   snapshotCount?: number; // Number of snapshots captured
   snapshotsDirectory?: string; // Directory containing all snapshots for this session
   totalSnapshotSize?: number; // Total size of all snapshots in bytes
+  
+  // LLM-friendly workflow context (optional, added during export/analysis)
+  workflowSummary?: string; // High-level description of what was accomplished
+  keyMilestones?: string[]; // Important steps (e.g., "Logged in", "Filled form", "Submitted")
+  finalOutcome?: string; // What was achieved (e.g., "Repository created successfully")
 }
