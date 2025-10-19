@@ -17,6 +17,7 @@ import type {
   FoundElement
 } from '@/shared/types';
 import { BrowserContextExtractor } from '@/main/context/BrowserContextExtractor';
+import { ViewportSnapshotCapture } from './ViewportSnapshotCapture';
 
 /**
  * BrowserAutomationExecutor
@@ -30,6 +31,7 @@ export class BrowserAutomationExecutor {
   private tabId: string;
   private isAttached = false;
   private contextExtractor: BrowserContextExtractor;
+  private snapshotCapture: ViewportSnapshotCapture;
 
   // Effect tracking
   private preActionState: any = null;
@@ -39,6 +41,7 @@ export class BrowserAutomationExecutor {
     this.debugger = view.webContents.debugger;
     this.tabId = tabId;
     this.contextExtractor = new BrowserContextExtractor(view);
+    this.snapshotCapture = new ViewportSnapshotCapture(view);
   }
 
   // ============================================================================
@@ -82,6 +85,8 @@ export class BrowserAutomationExecutor {
         return this.extractBrowserContext(params as { maxElements?: number });
       case 'extract_viewport_context':
         return this.extractViewportContext(params);
+      case 'capture_viewport_snapshot':
+        return this.captureViewportSnapshot(params);
       default:
         throw new Error(`Unknown tool: ${toolName}`);
     }
@@ -2148,5 +2153,97 @@ export class BrowserAutomationExecutor {
       tabId: this.tabId,
       url: this.view.webContents.getURL()
     };
+  }
+
+  /**
+   * Capture viewport snapshot - Visual screenshot for Claude vision analysis
+   * Returns base64-encoded JPEG optimized for Claude's vision capabilities
+   */
+  public async captureViewportSnapshot(params: {
+    scrollTo?: 'current' | 'top' | 'bottom' | number | { 
+      element: string; 
+      backupSelectors: string[] 
+    };
+  }): Promise<ToolExecutionResult> {
+    const startTime = Date.now();
+
+    try {
+      console.log('[Automation] 📸 Capturing viewport snapshot...');
+
+      const scrollTo = params.scrollTo || 'current';
+
+      // Log scroll action
+      if (scrollTo !== 'current') {
+        if (typeof scrollTo === 'object' && scrollTo.element) {
+          console.log(`[Automation] 📜 Scrolling to element: ${scrollTo.element}`);
+        } else {
+          console.log(`[Automation] 📜 Scrolling to: ${scrollTo}`);
+        }
+      }
+
+      // Capture snapshot using ViewportSnapshotCapture
+      const result = await this.snapshotCapture.captureSnapshot(scrollTo);
+
+      if (!result.success || !result.image) {
+        return this.createErrorResult('capture_viewport_snapshot', startTime, {
+          code: 'EXECUTION_ERROR',
+          message: result.error || 'Failed to capture viewport snapshot',
+          details: {
+            lastError: result.error,
+            suggestions: [
+              'Page may still be loading',
+              'If scrolling to element, verify selector is correct',
+              'Try with scrollTo: "current" to capture without scrolling',
+              'Check if page has rendering issues'
+            ]
+          }
+        });
+      }
+
+      const executionTime = Date.now() - startTime;
+
+      console.log(`[Automation] ✅ Snapshot captured: ${result.image.width}x${result.image.height} (~${result.image.estimatedTokens} tokens, ${executionTime}ms)`);
+
+      // Return snapshot in Claude-compatible format
+      // Following Anthropic's vision best practices: base64-encoded JPEG
+      return {
+        success: true,
+        toolName: 'capture_viewport_snapshot',
+        executionTime,
+        data: {
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: result.image.mediaType,
+            data: result.image.data
+          },
+          metadata: {
+            width: result.image.width,
+            height: result.image.height,
+            sizeBytes: result.image.sizeBytes,
+            estimatedTokens: result.image.estimatedTokens,
+            viewport: result.viewport
+          }
+        },
+        timestamp: Date.now(),
+        tabId: this.tabId,
+        url: this.view.webContents.getURL()
+      } as ToolExecutionResult;
+
+    } catch (error) {
+      return this.createErrorResult('capture_viewport_snapshot', startTime, {
+        code: 'EXECUTION_ERROR',
+        message: `Snapshot capture failed: ${error instanceof Error ? error.message : String(error)}`,
+        details: {
+          lastError: error instanceof Error ? error.message : String(error),
+          suggestions: [
+            'Page may be in an unstable state',
+            'If scrolling to element, check if element exists',
+            'Try capturing without scrolling first',
+            'Check browser console for errors'
+          ]
+        }
+      });
+    }
   }
 }

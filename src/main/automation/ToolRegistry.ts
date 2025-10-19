@@ -523,6 +523,102 @@ Examples:
       },
       required: []
     }
+  },
+  {
+    name: 'capture_viewport_snapshot',
+    description: `Capture a VISUAL SCREENSHOT of the viewport for visual analysis.
+
+**🎯 WHEN TO USE THIS TOOL:**
+- When you need to SEE what the page looks like visually
+- To understand layout, design, colors, images, and visual elements
+- To verify visual state after actions (e.g., "did the modal open?")
+- To analyze complex visual content that DOM context can't describe
+- To see rendered content, charts, images, or visual feedback
+- When DOM context is insufficient for understanding the page state
+
+**⚡ KEY BENEFITS:**
+- **Visual Understanding**: See exactly what the user sees
+- **Layout Analysis**: Understand spatial relationships and design
+- **Visual Verification**: Confirm visual changes after actions
+- **Image Analysis**: Analyze images, charts, diagrams on the page
+- **Optimized for Claude**: Auto-resized to 1568px max, ~1600 tokens
+- **Smart Scrolling**: Can scroll before capture to target specific areas
+
+**📸 SCROLL OPTIONS:**
+1. \`scrollTo: "current"\` - Capture current viewport (DEFAULT)
+2. \`scrollTo: "top"\` - Scroll to page top, then capture
+3. \`scrollTo: "bottom"\` - Scroll to page bottom, then capture
+4. \`scrollTo: 500\` - Scroll to specific Y position (pixels), then capture
+5. \`scrollTo: { element: "#section", backupSelectors: ["[data-section]", ".section"] }\` - Scroll element into view, then capture
+
+**🔥 COMMON USE CASES:**
+- "What does this page look like?" → \`scrollTo: "current"\`
+- "Show me the header" → \`scrollTo: "top"\`
+- "Capture the footer" → \`scrollTo: "bottom"\`
+- "Screenshot the pricing section" → \`scrollTo: { element: "#pricing", backupSelectors: [".pricing-section"] }\`
+- "Did the modal open?" → \`scrollTo: "current"\` (after click action)
+- "What color is the button?" → Use this tool to see visually
+
+**📝 BEST PRACTICES:**
+- Use AFTER actions to verify visual changes
+- Combine with extract_viewport_context for complete understanding
+- Use specific scrollTo when targeting sections
+- Always provide 2-3 backupSelectors when scrolling to element
+- Use "current" when you just need to see what's visible now
+
+**💡 VISION + CONTEXT STRATEGY:**
+1. First: Use extract_viewport_context to get DOM structure
+2. Then: Use capture_viewport_snapshot to see visual appearance
+3. Result: Complete understanding (structure + visual)
+
+**⚠️ IMPORTANT NOTES:**
+- Images are automatically optimized (max 1568px, JPEG quality 85)
+- Estimated ~1600 tokens per snapshot (~$0.0048 per snapshot)
+- Waits 2 seconds after scroll for content to settle
+- Returns base64-encoded JPEG ready for Claude vision analysis
+
+**CRITICAL: This is an ANALYSIS tool, not an automation action.**
+Use it to understand page state, not to perform actions.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        scrollTo: {
+          description: `Where to scroll before capturing. Options:
+- "current" (default): Capture current viewport, no scrolling
+- "top": Scroll to page top
+- "bottom": Scroll to page bottom  
+- number: Scroll to specific Y position in pixels (e.g., 500)
+- object: Scroll element into view, requires:
+  - element: Primary CSS selector (e.g., "#pricing-section")
+  - backupSelectors: Array of 2-3 backup selectors (REQUIRED)
+  
+Examples:
+- { "element": "#footer", "backupSelectors": ["footer", "[role='contentinfo']"] }
+- { "element": "[data-section='pricing']", "backupSelectors": ["#pricing", ".pricing-section"] }`,
+          oneOf: [
+            { type: 'string', enum: ['current', 'top', 'bottom'] },
+            { type: 'number' },
+            {
+              type: 'object',
+              properties: {
+                element: {
+                  type: 'string',
+                  description: 'Primary CSS selector for element to scroll to'
+                },
+                backupSelectors: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'REQUIRED: 2-3 backup selectors for robustness',
+                  minItems: 2
+                }
+              },
+              required: ['element', 'backupSelectors']
+            }
+          ]
+        }
+      },
+      required: []
+    }
   }
 ];
 
