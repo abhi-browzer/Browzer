@@ -19,6 +19,8 @@ export interface ParsedAutomationPlan {
   analysis?: string; // Claude's initial analysis/explanation
   totalSteps: number;
   hasToolCalls: boolean;
+  planType?: 'intermediate' | 'final'; // Whether this is a partial plan or final plan
+  reasoning?: string; // Why this is intermediate/final
 }
 
 /**
@@ -63,14 +65,124 @@ export class AutomationPlanParser {
       }
     }
 
+    // Detect plan type from analysis text
+    const planType = this.detectPlanType(analysis, steps);
+    const reasoning = this.extractPlanReasoning(analysis);
+
     console.log(`✅ [AutomationPlanParser] Parsed ${steps.length} automation steps`);
+    console.log(`   Plan type: ${planType}`);
+    if (reasoning) {
+      console.log(`   Reasoning: ${reasoning.substring(0, 100)}...`);
+    }
 
     return {
       steps,
       analysis: analysis.trim(),
       totalSteps: steps.length,
-      hasToolCalls: steps.length > 0
+      hasToolCalls: steps.length > 0,
+      planType,
+      reasoning
     };
+  }
+
+  /**
+   * Detect if this is an intermediate or final plan
+   * 
+   * Intermediate plans:
+   * - Contain extract_context or take_snapshot tools
+   * - Mention "analyze", "check", "verify", "then continue"
+   * - Explicitly state this is a partial plan
+   * 
+   * Final plans:
+   * - No analysis tools at the end
+   * - Mention "complete", "finish", "final step"
+   */
+  private static detectPlanType(
+    analysis: string,
+    steps: ParsedAutomationStep[]
+  ): 'intermediate' | 'final' {
+    const analysisLower = analysis.toLowerCase();
+    
+    // Check if plan ends with analysis tools
+    const lastStep = steps[steps.length - 1];
+    const hasAnalysisToolAtEnd = lastStep && 
+      (lastStep.toolName === 'extract_context' || 
+       lastStep.toolName === 'take_snapshot');
+
+    // Check for intermediate keywords
+    const intermediateKeywords = [
+      'then analyze',
+      'then check',
+      'then verify',
+      'capture viewport snapshot',
+      'need to analyze',
+      'need to check',
+      'partial plan',
+      'intermediate step',
+      'will continue',
+      'then proceed',
+      'after analyzing'
+    ];
+
+    const hasIntermediateKeywords = intermediateKeywords.some(keyword => 
+      analysisLower.includes(keyword)
+    );
+
+    // Check for final keywords
+    const finalKeywords = [
+      'final plan',
+      'complete automation',
+      'finish the task',
+      'accomplish the goal',
+      'task complete',
+      'automation complete'
+    ];
+
+    const hasFinalKeywords = finalKeywords.some(keyword => 
+      analysisLower.includes(keyword)
+    );
+
+    // Decision logic
+    if (hasAnalysisToolAtEnd || hasIntermediateKeywords) {
+      return 'intermediate';
+    }
+
+    if (hasFinalKeywords) {
+      return 'final';
+    }
+
+    // Default: if no clear indicators, assume final
+    // (Most plans are complete unless explicitly stated otherwise)
+    return 'final';
+  }
+
+  /**
+   * Extract reasoning about why this plan is intermediate/final
+   */
+  private static extractPlanReasoning(analysis: string): string | undefined {
+    // Look for sentences containing plan type reasoning
+    const sentences = analysis.split(/[.!?]\s+/);
+    
+    const reasoningKeywords = [
+      'intermediate',
+      'final',
+      'partial',
+      'complete',
+      'analyze',
+      'context',
+      'then',
+      'after'
+    ];
+
+    const reasoningSentences = sentences.filter(sentence => 
+      reasoningKeywords.some(keyword => 
+        sentence.toLowerCase().includes(keyword)
+      )
+    );
+
+    return reasoningSentences.length > 0 
+      ? reasoningSentences.slice(0, 2).join('. ') 
+      : undefined;
   }
 
   /**

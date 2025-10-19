@@ -83,7 +83,7 @@ export class BrowserAutomationExecutor {
         return this.submit(params as SubmitParams);
       case 'extract_context':
         return this.extractContext(params);
-      case 'capture_viewport_snapshot':
+      case 'take_snapshot':
         return this.captureViewportSnapshot(params);
       default:
         throw new Error(`Unknown tool: ${toolName}`);
@@ -1070,12 +1070,10 @@ export class BrowserAutomationExecutor {
     lastError?: string;
   }> {
     try {
-      // Type character by character using CDP for native-like input
       for (let i = 0; i < text.length; i++) {
         const char = text[i];
         
-        // Use CDP to dispatch keyboard events (more native than JS events)
-        // This triggers browser's native input handling
+        // Send keyDown event WITHOUT text parameter (just the key press, no insertion)
         await this.debugger.sendCommand('Input.dispatchKeyEvent', {
           type: 'keyDown',
           text: char,
@@ -1083,13 +1081,14 @@ export class BrowserAutomationExecutor {
           code: this.getKeyCodeString(char),
           windowsVirtualKeyCode: char.charCodeAt(0),
           nativeVirtualKeyCode: char.charCodeAt(0)
+          // NOTE: NO 'text' parameter here - that would insert the character
         });
 
-        // Insert text using CDP - this properly updates the input value
-        await this.debugger.sendCommand('Input.insertText', {
-          text: char
-        });
+        // await this.debugger.sendCommand('Input.insertText', {
+        //   text: char
+        // });
 
+        // Send keyUp event
         await this.debugger.sendCommand('Input.dispatchKeyEvent', {
           type: 'keyUp',
           key: char,
@@ -1098,24 +1097,11 @@ export class BrowserAutomationExecutor {
           nativeVirtualKeyCode: char.charCodeAt(0)
         });
 
-        // Trigger React/Vue events after each character
         await this.view.webContents.executeJavaScript(`
           (function() {
             const input = document.querySelector(${JSON.stringify(selector)});
-            if (input) {
-              // Trigger input event with proper InputEvent constructor
-              const inputEvent = new InputEvent('input', {
-                bubbles: true,
-                cancelable: true,
-                inputType: 'insertText',
-                data: ${JSON.stringify(char)}
-              });
-              input.dispatchEvent(inputEvent);
-              
-              // Update React's internal value tracker if present
-              if (input._valueTracker) {
-                input._valueTracker.setValue('');
-              }
+            if (input && input._valueTracker) {
+              input._valueTracker.setValue('');
             }
           })();
         `);
@@ -2159,7 +2145,7 @@ public async captureViewportSnapshot(params: {
       const result = await this.snapshotCapture.captureSnapshot(scrollTo);
 
       if (!result.success || !result.image) {
-        return this.createErrorResult('capture_viewport_snapshot', startTime, {
+        return this.createErrorResult('take_snapshot', startTime, {
           code: 'EXECUTION_ERROR',
           message: result.error || 'Failed to capture viewport snapshot',
           details: {
@@ -2182,7 +2168,7 @@ public async captureViewportSnapshot(params: {
       // Following Anthropic's vision best practices: base64-encoded JPEG
       return {
         success: true,
-        toolName: 'capture_viewport_snapshot',
+        toolName: 'take_snapshot',
         executionTime,
         data: {
           type: 'image',
@@ -2205,7 +2191,7 @@ public async captureViewportSnapshot(params: {
       } as ToolExecutionResult;
 
     } catch (error) {
-      return this.createErrorResult('capture_viewport_snapshot', startTime, {
+      return this.createErrorResult('take_snapshot', startTime, {
         code: 'EXECUTION_ERROR',
         message: `Snapshot capture failed: ${error instanceof Error ? error.message : String(error)}`,
         details: {

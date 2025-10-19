@@ -153,24 +153,66 @@ When a recorded session is provided (in XML format), use it INTELLIGENTLY:
 - Use "wait" after typing to let page validate/enable buttons
 </tool_usage_guidelines>
 
+<multi_phase_automation>
+**IMPORTANT: You can create INTERMEDIATE or FINAL plans, but always PREFER to create final plan untill it becomes mandatory to get the context of DOM at any step(dyanic data).:**
+
+**INTERMEDIATE PLAN** - Use when you need to analyze dynamic content mid-execution:
+- Execute some automation steps
+- Use extract_context or take_snapshot to analyze current state
+- Then wait for system to return results
+- You'll receive the analysis results and can generate the next plan
+
+Example scenarios for intermediate plans:
+- "Click the first repository" - You need to see what repositories exist
+- "Navigate to the last page" - You need to see pagination state
+- "Fill dynamic form fields" - You need to see what fields appeared
+- "Click on user-specific elements" - You need to see current page content
+
+**FINAL PLAN** - Use when you can complete the entire task:
+- All steps are known and deterministic
+- No need to analyze dynamic content mid-execution
+- System will execute all steps and exit on success
+
+**How to indicate plan type:**
+- For INTERMEDIATE: End your plan with extract_context or take_snapshot tool
+- For FINAL: Don't use analysis tools at the end, just complete the automation
+- System automatically detects plan type based on your tool usage
+
+**INTERMEDIATE PLAN EXAMPLE:**
+"I need to delete the latest repository, but I don't know which one it is from the recording. I'll navigate to the repositories page, then extract context to see the current list."
+
+[Tool calls: navigate → wait → click profile → click repositories → wait → extract_context]
+
+**FINAL PLAN EXAMPLE:**
+"I can complete the entire repository deletion workflow since all selectors are known from the recording."
+
+[Tool calls: navigate → wait → click repo → wait → click settings → ... → click delete]
+</multi_phase_automation>
+
 <output_format>
 Your response should contain:
 
 1. **Brief optimization analysis** (2-3 sentences):
    - What is the user's goal?
-   - What is the SHORTEST path to achieve it?
-   - How many steps did you optimize it to?
+   - What is the SHORTEST & MOST OPTIMIZED path to achieve it?
+   - Is this an intermediate or final plan? Why?
 
 2. **Tool calls** (the optimized automation plan):
    - Use the available tools to implement the SHORTEST workflow
    - Include ONLY essential steps
    - Provide proper selectors with backups
    - Add wait times only where necessary
+   - End with extract_context/take_snapshot if this is an intermediate plan
 
-**EXAMPLE STRUCTURE:**
-"The user wants to create a GitHub repository named 'my-project'. Instead of following the 15-step recorded workflow, I've optimized this to 4 essential steps: navigate directly to github.com/new, fill the repository name, and submit. This achieves the same result with 73% fewer steps."
+**EXAMPLE STRUCTURE (FINAL):**
+"The user wants to create a GitHub repository named 'my-project'. Instead of following the 15-step recorded workflow, I've optimized this to 4 essential steps: navigate directly to github.com/new, fill the repository name, and submit. This is a FINAL plan since all steps are deterministic."
 
 [Then immediately provide ALL tool calls for the optimized workflow]
+
+**EXAMPLE STRUCTURE (INTERMEDIATE):**
+"The user wants to click the first link, but I need to see what links exist on the current page. This can be an INTERMEDIATE plan - I'll navigate to the page and extract context to see available links."
+
+[Tool calls for navigation + extract_context at the end]
 </output_format>
 
 <quality_standards>
@@ -335,6 +377,73 @@ Please create a COMPLETE automation plan that accomplishes this goal. Generate A
   }
 
   /**
+   * Build continuation prompt after intermediate plan execution
+   * 
+   * This is used when an intermediate plan completes successfully and
+   * Claude needs to generate the next plan based on extracted context.
+   */
+  public static buildIntermediatePlanContinuationPrompt(params: {
+    userGoal: string;
+    completedPlan: {
+      analysis: string;
+      stepsExecuted: number;
+    };
+    executedSteps: Array<{
+      stepNumber: number;
+      toolName: string;
+      success: boolean;
+      summary?: string;
+    }>;
+    extractedContext?: {
+      url: string;
+      interactiveElements: number;
+      forms: number;
+      // Full context is in the tool_result, this is just summary
+    };
+    currentUrl: string;
+  }): string {
+    const { userGoal, completedPlan, executedSteps, extractedContext, currentUrl } = params;
+
+    return `**INTERMEDIATE PLAN COMPLETED SUCCESSFULLY**
+
+**Original Goal:**
+${userGoal}
+
+**Completed Plan Analysis:**
+${completedPlan.analysis}
+
+**Executed Steps (${completedPlan.stepsExecuted} total):**
+${executedSteps.map(step => 
+  `- Step ${step.stepNumber}: ${step.toolName} - ✅ SUCCESS${step.summary ? ` (${step.summary})` : ''}`
+).join('\n')}
+
+**Current State:**
+- Current URL: ${currentUrl}
+${extractedContext ? `- Interactive elements found: ${extractedContext.interactiveElements}` : ''}
+${extractedContext ? `- Forms found: ${extractedContext.forms}` : ''}
+
+**Your Task:**
+You have successfully executed an intermediate plan. Now:
+
+1. **Analyze the extracted context** (provided in the tool_result above)
+   - Review the current page elements, selectors, and structure
+   - Understand what options are available for the next steps
+   - Identify the correct elements to interact with
+
+2. **Generate the NEXT plan** to continue toward the goal:
+   - This can be another INTERMEDIATE plan (only if more analysis needed)
+   - Or a FINAL plan (if you can now complete the entire remaining tasks from the current state)
+   - Use the extracted context to choose accurate selectors
+   - Start from the CURRENT state (don't repeat completed steps)
+
+3. **Decide plan type:**
+   - INTERMEDIATE: ONLY if you need to execute some steps and analyze again
+   - FINAL: If you can now complete all remaining steps to achieve the goal
+
+Remember: You've made progress. Focus on what remains to achieve the goal using the current page context.`;
+  }
+
+  /**
    * Build error recovery user prompt
    * 
    * @param errorInfo - Information about the error that occurred
@@ -347,14 +456,14 @@ Please create a COMPLETE automation plan that accomplishes this goal. Generate A
     errorInfo: {
       message: string;
       code?: string;
-      details?: any;
+      details?: unknown;
       suggestions?: string[];
     };
     userGoal: string;
     failedStep: {
       stepNumber: number;
       toolName: string;
-      params: any;
+      params: unknown;
     };
     executedSteps: Array<{
       stepNumber: number;

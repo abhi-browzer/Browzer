@@ -31,6 +31,15 @@ interface IterativeAutomationState {
     error?: string;
   }>;
   
+  // Multi-phase tracking
+  phaseNumber: number; // Track which phase we're in (1, 2, 3, ...)
+  completedPlans: Array<{
+    phaseNumber: number;
+    plan: ParsedAutomationPlan;
+    stepsExecuted: number;
+  }>;
+  isInRecovery: boolean; // Track if we're in error recovery mode
+  
   // Recovery tracking
   recoveryAttempts: number;
   maxRecoveryAttempts: number;
@@ -100,7 +109,7 @@ export class IterativeAutomationService {
   public async executeAutomation(
     userGoal: string,
     recordedSessionId: string,
-    maxRecoveryAttempts = 3
+    maxRecoveryAttempts = 7
   ): Promise<IterativeAutomationResult> {
     console.log('🚀 [IterativeAutomation] Starting Smart ReAct automation...');
     console.log(`   Goal: ${userGoal}`);
@@ -111,6 +120,9 @@ export class IterativeAutomationService {
       userGoal,
       messages: [],
       executedSteps: [],
+      phaseNumber: 1,
+      completedPlans: [],
+      isInRecovery: false,
       recoveryAttempts: 0,
       maxRecoveryAttempts,
       isComplete: false,
@@ -173,10 +185,11 @@ export class IterativeAutomationService {
           console.log(`🔄 [IterativeAutomation] Recovery attempt ${state.recoveryAttempts}/${state.maxRecoveryAttempts}`);
           
           if (state.recoveryAttempts > state.maxRecoveryAttempts) {
-            state.isComplete = true;
-            state.finalSuccess = false;
-            state.finalError = `Max recovery attempts (${state.maxRecoveryAttempts}) exceeded. Last error: ${executionResult.error}`;
-            break;
+            // state.isComplete = true;
+            // state.finalSuccess = false;
+            // state.finalError = `Max recovery attempts (${state.maxRecoveryAttempts}) exceeded. Last error: ${executionResult.error}`;
+            // break;
+            console.log(`🔄 [IterativeAutomation] Max recovery attempts (${state.maxRecoveryAttempts}) exceeded. Last error: ${executionResult.error}`);
           }
         }
       }
@@ -291,18 +304,65 @@ export class IterativeAutomationService {
             console.error('   Result:', JSON.stringify(result, null, 2));
           }
           
-          // Add tool result to conversation with the actual browser context
-          const toolResultMessage: Anthropic.MessageParam = {
+          // Record this step
+          state.executedSteps.push({
+            stepNumber,
+            toolName: step.toolName,
+            success: true,
+            result
+          });
+          
+          // CRITICAL: We need to provide tool_results for ALL tool_use blocks from the current plan
+          // Not just extract_browser_context, but all steps executed so far
+          if (!state.currentPlan) {
+            return { success: false, isComplete: true, error: 'No plan available' };
+          }
+          
+          const toolResultBlocks: Anthropic.Messages.ToolResultBlockParam[] = [];
+          
+          // Build tool_result for ALL steps executed so far (including extract_browser_context)
+          for (let j = 0; j < state.currentPlan.steps.length; j++) {
+            const planStep = state.currentPlan.steps[j];
+            const executedStep = state.executedSteps.find(
+              es => es.toolName === planStep.toolName && es.result
+            );
+            
+            if (!executedStep || !executedStep.result) {
+              // This step hasn't been executed yet - stop here
+              break;
+            }
+            
+            const stepResult = executedStep.result;
+            
+            // For extract_browser_context, include full context
+            if (planStep.toolName === 'extract_browser_context' || planStep.toolName === 'extract_context') {
+              const ctx = stepResult.context || stepResult.value;
+              toolResultBlocks.push({
+                type: 'tool_result',
+                tool_use_id: planStep.toolUseId,
+                content: JSON.stringify(ctx, null, 2)
+              });
+            } else {
+              // For other tools, simple success message
+              toolResultBlocks.push({
+                type: 'tool_result',
+                tool_use_id: planStep.toolUseId,
+                content: JSON.stringify({
+                  success: true,
+                  message: `${planStep.toolName} executed successfully`,
+                  summary: stepResult.effects?.summary || `Completed ${planStep.toolName}`
+                })
+              });
+            }
+          }
+          
+          console.log(`✅ [IterativeAutomation] Submitting ${toolResultBlocks.length} tool_result blocks (including browser context)`);
+          
+          // Add ALL tool results to conversation
+          state.messages.push({
             role: 'user',
-            content: [{
-              type: 'tool_result',
-              tool_use_id: step.toolUseId,
-              content: JSON.stringify(contextData, null, 2)
-            }]
-          };
-          state.messages.push(toolResultMessage);
-
-          console.log(`✅ [IterativeAutomation] Browser context submitted to Claude (${JSON.stringify(contextData).length} chars)`);
+            content: toolResultBlocks
+          });
 
           // Continue conversation to get next steps
           const recoveryResult = await this.continueAfterContextExtraction(state);
@@ -372,6 +432,110 @@ export class IterativeAutomationService {
 
     // All steps completed successfully!
     console.log('✅ [IterativeAutomation] All steps completed successfully!');
+    
+    // CRITICAL: Check if we're in recovery mode
+    if (state.isInRecovery) {
+      console.log('✅ [IterativeAutomation] Recovery plan completed - generating new plan from context');
+      state.isInRecovery = false;
+      
+      // Recovery plans often end with extract_context
+      // We need to provide tool_result blocks for ALL steps in the recovery plan
+      if (!state.currentPlan) {
+        return { success: false, isComplete: true, error: 'No plan available' };
+      }
+      
+      // Build tool_result blocks for ALL steps in the recovery plan
+      const toolResultBlocks: Anthropic.Messages.ToolResultBlockParam[] = [];
+      
+      for (let i = 0; i < state.currentPlan.steps.length; i++) {
+        const step = state.currentPlan.steps[i];
+        const executedStep = state.executedSteps.find(
+          es => es.toolName === step.toolName && es.result
+        );
+        
+        if (!executedStep || !executedStep.result) {
+          console.error(`   ❌ Missing execution result for recovery step: ${step.toolName}`);
+          continue;
+        }
+        
+        const result = executedStep.result;
+        
+        // For extract_context, include full context data
+        if (step.toolName === 'extract_context' || step.toolName === 'extract_browser_context') {
+          const contextData = result.context || result.value;
+          toolResultBlocks.push({
+            type: 'tool_result',
+            tool_use_id: step.toolUseId,
+            content: JSON.stringify(contextData, null, 2)
+          });
+        } else {
+          // For other tools, simple success message
+          toolResultBlocks.push({
+            type: 'tool_result',
+            tool_use_id: step.toolUseId,
+            content: JSON.stringify({
+              success: true,
+              message: `${step.toolName} executed successfully`
+            })
+          });
+        }
+      }
+      
+      console.log(`   Submitting ${toolResultBlocks.length} tool_result blocks for recovery plan`);
+      
+      // Add tool results to conversation
+      state.messages.push({
+        role: 'user',
+        content: toolResultBlocks
+      });
+      
+      // Continue conversation to get new plan
+      const systemPrompt = SystemPromptBuilder.buildErrorRecoverySystemPrompt();
+      const tools = this.toolRegistry.getToolDefinitions();
+      
+      const response = await this.claudeClient.continueConversation({
+        systemPrompt,
+        messages: state.messages,
+        tools,
+        cachedContext: state.cachedContext
+      });
+      
+      // Add assistant response
+      state.messages.push({
+        role: 'assistant',
+        content: response.content
+      });
+      
+      // Parse new plan
+      const newPlan = AutomationPlanParser.parsePlan(response);
+      console.log('📋 [IterativeAutomation] Plan after recovery:');
+      console.log(AutomationPlanParser.getSummary(newPlan));
+      
+      state.currentPlan = newPlan;
+      const usage = this.claudeClient.getUsageStats(response);
+      
+      return { success: false, isComplete: false, usage };
+    }
+    
+    // Check if this was an intermediate or final plan
+    const planType = state.currentPlan.planType || 'final';
+    
+    if (planType === 'intermediate') {
+      console.log('🔄 [IterativeAutomation] Intermediate plan completed - continuing to next phase...');
+      
+      // Record this completed plan
+      state.completedPlans.push({
+        phaseNumber: state.phaseNumber,
+        plan: state.currentPlan,
+        stepsExecuted: state.currentPlan.totalSteps
+      });
+      state.phaseNumber++;
+      
+      return await this.continueAfterIntermediatePlan(state);
+    }
+    
+    // Final plan completed - we're done!
+    console.log('🎉 [IterativeAutomation] Final plan completed - automation successful!');
     return { success: true, isComplete: true };
   }
 
@@ -517,8 +681,9 @@ export class IterativeAutomationService {
     console.log('📋 [IterativeAutomation] Recovery plan generated:');
     console.log(AutomationPlanParser.getSummary(newPlan));
 
-    // Update current plan
+    // Update current plan and mark as recovery mode
     state.currentPlan = newPlan;
+    state.isInRecovery = true; // CRITICAL: Mark that we're executing a recovery plan
 
     const usage = this.claudeClient.getUsageStats(response);
 
@@ -528,7 +693,9 @@ export class IterativeAutomationService {
 
   /**
    * Continue conversation after context extraction
-   * Claude called extract_browser_context, now we need to continue the conversation
+   * This is called when extract_browser_context is used mid-execution
+   * Note: The tool_result for extract_browser_context is already added to messages
+   * before this function is called (see executePlanWithRecovery)
    */
   private async continueAfterContextExtraction(state: IterativeAutomationState): Promise<{
     success: boolean;
@@ -538,6 +705,9 @@ export class IterativeAutomationService {
   }> {
     console.log('🔄 [IterativeAutomation] Continuing after context extraction...');
 
+    // Note: tool_result for extract_browser_context is already in state.messages
+    // This was added in executePlanWithRecovery before calling this function
+    
     // Continue conversation with same system prompt
     const systemPrompt = state.recoveryAttempts > 0
       ? SystemPromptBuilder.buildErrorRecoverySystemPrompt()
@@ -569,6 +739,142 @@ export class IterativeAutomationService {
     const usage = this.claudeClient.getUsageStats(response);
 
     // Return to continue execution
+    return { success: false, isComplete: false, usage };
+  }
+
+  /**
+   * Continue conversation after intermediate plan completion
+   * 
+   * An intermediate plan completed successfully. Now we need to:
+   * 1. Collect results from analysis tools (extract_context, take_snapshot)
+   * 2. Submit them to Claude with continuation prompt
+   * 3. Get the next plan (could be another intermediate or final)
+   */
+  private async continueAfterIntermediatePlan(state: IterativeAutomationState): Promise<{
+    success: boolean;
+    isComplete: boolean;
+    error?: string;
+    usage?: any;
+  }> {
+    console.log('🔄 [IterativeAutomation] Continuing after intermediate plan completion...');
+
+    if (!state.currentPlan) {
+      return { success: false, isComplete: true, error: 'No plan available' };
+    }
+
+    // CRITICAL: We must provide tool_result blocks for ALL tool_use blocks from the plan
+    // Anthropic API requires this - you cannot skip any tool_result blocks
+    
+    const toolResultBlocks: Anthropic.Messages.ToolResultBlockParam[] = [];
+    
+    // Process ALL steps in the plan and create tool_result blocks
+    for (let i = 0; i < state.currentPlan.steps.length; i++) {
+      const step = state.currentPlan.steps[i];
+      const executedStep = state.executedSteps.find(
+        es => es.toolName === step.toolName && es.result
+      );
+      
+      if (!executedStep || !executedStep.result) {
+        console.error(`   ❌ Missing execution result for step: ${step.toolName}`);
+        continue;
+      }
+      
+      const result = executedStep.result;
+      
+      // For analysis tools, include the full context/snapshot data
+      if (step.toolName === 'extract_context' || step.toolName === 'extract_browser_context') {
+        const contextData = result.context || result.value;
+        toolResultBlocks.push({
+          type: 'tool_result',
+          tool_use_id: step.toolUseId,
+          content: JSON.stringify(contextData, null, 2)
+        });
+      } else if (step.toolName === 'take_snapshot') {
+        const snapshotData = result.value;
+        toolResultBlocks.push({
+          type: 'tool_result',
+          tool_use_id: step.toolUseId,
+          content: JSON.stringify(snapshotData, null, 2)
+        });
+      } else {
+        // For regular automation tools (navigate, click, type, etc.)
+        // Just provide a simple success message
+        toolResultBlocks.push({
+          type: 'tool_result',
+          tool_use_id: step.toolUseId,
+          content: JSON.stringify({
+            success: true,
+            message: `${step.toolName} executed successfully`,
+            summary: result.effects?.summary || `Completed ${step.toolName}`
+          })
+        });
+      }
+    }
+
+    console.log(`   Submitting ${toolResultBlocks.length} tool_result blocks (${state.currentPlan.steps.length} steps in plan)`);
+
+    // Build continuation prompt
+    const lastCompletedPlan = state.completedPlans[state.completedPlans.length - 1];
+    const continuationPrompt = SystemPromptBuilder.buildIntermediatePlanContinuationPrompt({
+      userGoal: state.userGoal,
+      completedPlan: {
+        analysis: lastCompletedPlan.plan.analysis || '',
+        stepsExecuted: lastCompletedPlan.stepsExecuted
+      },
+      executedSteps: state.executedSteps.map(es => ({
+        stepNumber: es.stepNumber,
+        toolName: es.toolName,
+        success: es.success,
+        summary: es.result?.effects?.summary
+      })),
+      extractedContext: state.executedSteps.length > 0 && state.executedSteps[state.executedSteps.length - 1].result ? {
+        url: state.executedSteps[state.executedSteps.length - 1].result!.url,
+        interactiveElements: state.executedSteps[state.executedSteps.length - 1].result!.context?.dom?.stats?.interactiveElements || 0,
+        forms: state.executedSteps[state.executedSteps.length - 1].result!.context?.dom?.forms?.length || 0
+      } : undefined,
+      currentUrl: state.executedSteps[state.executedSteps.length - 1]?.result?.url || ''
+    });
+
+    // Add user message with tool results AND continuation prompt
+    state.messages.push({
+      role: 'user',
+      content: [
+        ...toolResultBlocks,
+        {
+          type: 'text',
+          text: continuationPrompt
+        }
+      ]
+    });
+
+    // Continue conversation with automation system prompt
+    const systemPrompt = SystemPromptBuilder.buildAutomationSystemPrompt();
+    const tools = this.toolRegistry.getToolDefinitions();
+
+    const response = await this.claudeClient.continueConversation({
+      systemPrompt,
+      messages: state.messages,
+      tools,
+      cachedContext: state.cachedContext
+    });
+
+    // Add assistant response to conversation
+    state.messages.push({
+      role: 'assistant',
+      content: response.content
+    });
+
+    // Parse new plan
+    const newPlan = AutomationPlanParser.parsePlan(response);
+    console.log(`📋 [IterativeAutomation] Phase ${state.phaseNumber} plan generated:`);
+    console.log(AutomationPlanParser.getSummary(newPlan));
+
+    // Update current plan
+    state.currentPlan = newPlan;
+
+    const usage = this.claudeClient.getUsageStats(response);
+
+    // Return to continue execution with new plan
     return { success: false, isComplete: false, usage };
   }
 

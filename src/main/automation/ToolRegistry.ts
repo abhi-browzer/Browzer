@@ -437,9 +437,17 @@ Letters: a, b, c (lowercase) or with Shift modifier for uppercase`
 - Always provide 2-4 backupSelectors when scrolling to element
 - For multi-section pages, call multiple times with different scrollTo values
 
-**DO NOT include this in automation plan steps.** Use it to:
-- Understand page state after errors
-- Analyze available elements
+**🔄 MULTI-PHASE AUTOMATION:**
+You can create INTERMEDIATE plans that end with this tool:
+- Execute some automation steps
+- Use extract_context/take_snapshot to analyze current state
+- System will return results and ask for next plan
+- Generate next plan based on extracted context
+
+
+**DO NOT include this in regular automation steps.** Use it to:
+- Understand page state after errors (error recovery)
+- Analyze available elements mid-execution (intermediate plans)
 - Verify expected elements appeared
 - Decide next actions based on current state`,
     input_schema: {
@@ -447,7 +455,7 @@ Letters: a, b, c (lowercase) or with Shift modifier for uppercase`
       properties: {
         full: {
           type: 'boolean',
-          description: 'If true, extract FULL page context (all elements). If false (default), extract VIEWPORT only (visible elements). Use false for token efficiency.',
+          description: 'If true, extract FULL page context (all elements). If false (default), extract VIEWPORT only (visible elements). Prefer false for token efficiency. ONLY if you need complete page context.',
           default: false
         },
         scrollTo: {
@@ -494,7 +502,7 @@ Examples:
     }
   },
   {
-    name: 'capture_viewport_snapshot',
+    name: 'take_snapshot',
     description: `Capture a VISUAL SCREENSHOT of the viewport for visual analysis.
 
 **🎯 WHEN TO USE THIS TOOL:**
@@ -504,6 +512,13 @@ Examples:
 - To analyze complex visual content that DOM context can't describe
 - To see rendered content, charts, images, or visual feedback
 - When DOM context is insufficient for understanding the page state
+
+**🔄 MULTI-PHASE AUTOMATION:**
+You can create INTERMEDIATE plans that end with this tool:
+- Execute some automation steps
+- Use take_snapshot to capture current viewport
+- System will return results and ask for next plan
+- Generate next plan based on captured snapshot
 
 **⚡ KEY BENEFITS:**
 - **Visual Understanding**: See exactly what the user sees
@@ -537,7 +552,7 @@ Examples:
 
 **💡 VISION + CONTEXT STRATEGY:**
 1. First: Use extract_viewport_context to get DOM structure
-2. Then: Use capture_viewport_snapshot to see visual appearance
+2. Then: Use take_snapshot to see visual appearance
 3. Result: Complete understanding (structure + visual)
 
 **⚠️ IMPORTANT NOTES:**
