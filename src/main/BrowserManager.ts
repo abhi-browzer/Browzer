@@ -8,7 +8,7 @@ import { INTERNAL_PAGES } from '@/main/constants';
 import { stat } from 'fs/promises';
 import { PasswordUtil } from '@/main/utils/PasswordUtil';
 import { PasswordAutomation, BrowserAutomationExecutor } from './automation';
-import { LLMAutomationService } from './llm';
+import { IterativeAutomationService } from './llm';
 
 // Internal tab structure (includes WebContentsView)
 interface Tab {
@@ -53,7 +53,7 @@ export class BrowserManager {
   private activeVideoRecorder: VideoRecorder | null = null;
 
   // LLM Automation Service
-  private llmAutomationService: LLMAutomationService;
+  private llmAutomationService: IterativeAutomationService;
 
   constructor(baseWindow: BaseWindow, chromeHeight: number, agentUIView?: WebContentsView) {
     this.baseWindow = baseWindow;
@@ -70,7 +70,7 @@ export class BrowserManager {
     // We'll pass a dummy executor for now, actual executor is per-tab
     const dummyView = new WebContentsView();
     const dummyExecutor = new BrowserAutomationExecutor(dummyView, 'init');
-    this.llmAutomationService = new LLMAutomationService(
+    this.llmAutomationService = new IterativeAutomationService(
       dummyExecutor,
       this.recordingStore,
       process.env.ANTHROPIC_API_KEY
@@ -530,7 +530,7 @@ export class BrowserManager {
    * @param recordedSessionId - ID of recorded session to use as reference
    * @returns Automation result
    */
-  public async executeLLMAutomation(
+  public async executeIterativeAutomation(
     userGoal: string,
     recordedSessionId: string
   ): Promise<{
@@ -546,13 +546,9 @@ export class BrowserManager {
 
     const tab = this.tabs.get(this.activeTabId);
 
-    // Ensure automation executor exists for this tab
-    if (!tab.automationExecutor) {
-      tab.automationExecutor = new BrowserAutomationExecutor(tab.view, tab.id);
-    }
 
     // Create a new LLM service instance with the active tab's executor
-    const llmService = new LLMAutomationService(
+    const llmService = new IterativeAutomationService(
       tab.automationExecutor,
       this.recordingStore,
       process.env.ANTHROPIC_API_KEY
@@ -560,7 +556,7 @@ export class BrowserManager {
 
     // Execute automation
     try {
-      const result = await llmService.executeAutomationWithRecovery(userGoal, recordedSessionId);
+      const result = await llmService.executeAutomation(userGoal, recordedSessionId, 20);
       
       console.log('[BrowserManager] LLM automation completed');
       console.log(`  Success: ${result.success}`);
