@@ -111,9 +111,6 @@ export class IterativeAutomationService {
     recordedSessionId: string,
     maxRecoveryAttempts = 7
   ): Promise<IterativeAutomationResult> {
-    console.log('🚀 [IterativeAutomation] Starting Smart ReAct automation...');
-    console.log(`   Goal: ${userGoal}`);
-    console.log(`   Max recovery attempts: ${maxRecoveryAttempts}`);
 
     // Initialize state
     const state: IterativeAutomationState = {
@@ -178,20 +175,6 @@ export class IterativeAutomationService {
           }
           break;
         }
-
-        // If we need recovery, increment attempt counter
-        if (!executionResult.success) {
-          state.recoveryAttempts++;
-          console.log(`🔄 [IterativeAutomation] Recovery attempt ${state.recoveryAttempts}/${state.maxRecoveryAttempts}`);
-          
-          if (state.recoveryAttempts > state.maxRecoveryAttempts) {
-            // state.isComplete = true;
-            // state.finalSuccess = false;
-            // state.finalError = `Max recovery attempts (${state.maxRecoveryAttempts}) exceeded. Last error: ${executionResult.error}`;
-            // break;
-            console.log(`🔄 [IterativeAutomation] Max recovery attempts (${state.maxRecoveryAttempts}) exceeded. Last error: ${executionResult.error}`);
-          }
-        }
       }
 
       // Return final result
@@ -226,8 +209,6 @@ export class IterativeAutomationService {
     response: Anthropic.Message;
     usage: any;
   }> {
-    console.log('📋 [IterativeAutomation] Generating initial plan...');
-
     const systemPrompt = SystemPromptBuilder.buildAutomationSystemPrompt();
     const userPrompt = SystemPromptBuilder.buildUserPrompt(
       state.userGoal,
@@ -251,7 +232,7 @@ export class IterativeAutomationService {
 
     // Parse plan
     const plan = AutomationPlanParser.parsePlan(response);
-    console.log(AutomationPlanParser.getSummary(plan));
+    // console.log(AutomationPlanParser.getSummary(plan));
 
     // Validate plan
     const validation = AutomationPlanParser.validatePlan(
@@ -282,8 +263,6 @@ export class IterativeAutomationService {
       return { success: false, isComplete: true, error: 'No plan to execute' };
     }
 
-    console.log(`⚙️ [IterativeAutomation] Executing plan (${state.currentPlan.totalSteps} steps)...`);
-
     // Execute steps one by one
     for (let i = 0; i < state.currentPlan.steps.length; i++) {
       const step = state.currentPlan.steps[i];
@@ -293,14 +272,14 @@ export class IterativeAutomationService {
 
       try {
         // Special handling for extract_browser_context - execute immediately and return to Claude
-        if (step.toolName === 'extract_browser_context') {
+        if (step.toolName === 'extract_context') {
           const result = await this.executor.executeTool(step.toolName, step.input);
           
           // CRITICAL: extract_browser_context returns context in result.context, not result.value
           const contextData = result.context || result.value;
           
           if (!contextData) {
-            console.error('❌ [IterativeAutomation] extract_browser_context returned no data');
+            console.error('❌ [IterativeAutomation] extract_context returned no data');
             console.error('   Result:', JSON.stringify(result, null, 2));
           }
           
@@ -334,8 +313,8 @@ export class IterativeAutomationService {
             
             const stepResult = executedStep.result;
             
-            // For extract_browser_context, include full context
-            if (planStep.toolName === 'extract_browser_context' || planStep.toolName === 'extract_context') {
+            // For extract_context, include full context
+            if (planStep.toolName === 'extract_context') {
               const ctx = stepResult.context || stepResult.value;
               toolResultBlocks.push({
                 type: 'tool_result',
@@ -356,7 +335,7 @@ export class IterativeAutomationService {
             }
           }
           
-          console.log(`✅ [IterativeAutomation] Submitting ${toolResultBlocks.length} tool_result blocks (including browser context)`);
+          console.log(`✅ [IterativeAutomation] Submitting ${toolResultBlocks} tool_result blocks (including browser context)`);
           
           // Add ALL tool results to conversation
           state.messages.push({
@@ -398,8 +377,6 @@ export class IterativeAutomationService {
           result
         });
 
-        console.log(`   ✅ Step ${stepNumber} completed`);
-
       } catch (error: any) {
         console.error(`   ❌ Step ${stepNumber} failed:`, error.message);
 
@@ -430,9 +407,6 @@ export class IterativeAutomationService {
       }
     }
 
-    // All steps completed successfully!
-    console.log('✅ [IterativeAutomation] All steps completed successfully!');
-    
     // CRITICAL: Check if we're in recovery mode
     if (state.isInRecovery) {
       console.log('✅ [IterativeAutomation] Recovery plan completed - generating new plan from context');
@@ -454,7 +428,7 @@ export class IterativeAutomationService {
         );
         
         if (!executedStep || !executedStep.result) {
-          console.error(`   ❌ Missing execution result for recovery step: ${step.toolName}`);
+          console.error(`❌ Missing execution result for recovery step: ${step.toolName}`);
           continue;
         }
         
@@ -481,7 +455,11 @@ export class IterativeAutomationService {
         }
       }
       
-      console.log(`   Submitting ${toolResultBlocks.length} tool_result blocks for recovery plan`);
+      console.log(`Submitting tool_result blocks for recovery plan`);
+      toolResultBlocks.forEach(block => {
+        console.log(`   ${block.tool_use_id}: ${block.type}`);
+        console.log(block.content);
+      });
       
       // Add tool results to conversation
       state.messages.push({
@@ -508,8 +486,7 @@ export class IterativeAutomationService {
       
       // Parse new plan
       const newPlan = AutomationPlanParser.parsePlan(response);
-      console.log('📋 [IterativeAutomation] Plan after recovery:');
-      console.log(AutomationPlanParser.getSummary(newPlan));
+      // console.log(AutomationPlanParser.getSummary(newPlan));
       
       state.currentPlan = newPlan;
       const usage = this.claudeClient.getUsageStats(response);
@@ -521,9 +498,6 @@ export class IterativeAutomationService {
     const planType = state.currentPlan.planType || 'final';
     
     if (planType === 'intermediate') {
-      console.log('🔄 [IterativeAutomation] Intermediate plan completed - continuing to next phase...');
-      
-      // Record this completed plan
       state.completedPlans.push({
         phaseNumber: state.phaseNumber,
         plan: state.currentPlan,
@@ -534,8 +508,6 @@ export class IterativeAutomationService {
       return await this.continueAfterIntermediatePlan(state);
     }
     
-    // Final plan completed - we're done!
-    console.log('🎉 [IterativeAutomation] Final plan completed - automation successful!');
     return { success: true, isComplete: true };
   }
 
@@ -553,17 +525,11 @@ export class IterativeAutomationService {
     usage?: any;
   }> {
     console.log('🔄 [IterativeAutomation] Initiating error recovery...');
-
-    // CRITICAL: Before adding error message, we must provide tool_result blocks
-    // for ALL tool_use blocks from the previous assistant message
-    // This is required by Anthropic's API
     
     if (!state.currentPlan) {
       return { success: false, isComplete: true, error: 'No plan available for recovery' };
     }
 
-    // Build tool_result blocks for all steps in the current plan
-    // We need to match each tool_use from the plan with its execution result
     const toolResults: Array<{
       type: 'tool_result';
       tool_use_id: string;
@@ -571,7 +537,6 @@ export class IterativeAutomationService {
       is_error?: boolean;
     }> = [];
 
-    // Track how many steps we've processed
     let executedCount = 0;
 
     for (let i = 0; i < state.currentPlan.steps.length; i++) {
@@ -662,6 +627,10 @@ export class IterativeAutomationService {
     // Get recovery plan from Claude
     const systemPrompt = SystemPromptBuilder.buildErrorRecoverySystemPrompt();
     const tools = this.toolRegistry.getToolDefinitions();
+    state.messages.forEach(message => {
+      console.log("role: ", message.role);
+      console.log("content: ", message.content);
+    });
 
     const response = await this.claudeClient.continueConversation({
       systemPrompt,
@@ -679,7 +648,7 @@ export class IterativeAutomationService {
     // Parse new plan
     const newPlan = AutomationPlanParser.parsePlan(response);
     console.log('📋 [IterativeAutomation] Recovery plan generated:');
-    console.log(AutomationPlanParser.getSummary(newPlan));
+    // console.log(AutomationPlanParser.getSummary(newPlan));
 
     // Update current plan and mark as recovery mode
     state.currentPlan = newPlan;
@@ -705,9 +674,6 @@ export class IterativeAutomationService {
   }> {
     console.log('🔄 [IterativeAutomation] Continuing after context extraction...');
 
-    // Note: tool_result for extract_browser_context is already in state.messages
-    // This was added in executePlanWithRecovery before calling this function
-    
     // Continue conversation with same system prompt
     const systemPrompt = state.recoveryAttempts > 0
       ? SystemPromptBuilder.buildErrorRecoverySystemPrompt()
@@ -731,7 +697,7 @@ export class IterativeAutomationService {
     // Parse new plan
     const newPlan = AutomationPlanParser.parsePlan(response);
     console.log('📋 [IterativeAutomation] Plan after context extraction:');
-    console.log(AutomationPlanParser.getSummary(newPlan));
+    // console.log(AutomationPlanParser.getSummary(newPlan));
 
     // Update current plan
     state.currentPlan = newPlan;
@@ -742,14 +708,6 @@ export class IterativeAutomationService {
     return { success: false, isComplete: false, usage };
   }
 
-  /**
-   * Continue conversation after intermediate plan completion
-   * 
-   * An intermediate plan completed successfully. Now we need to:
-   * 1. Collect results from analysis tools (extract_context, take_snapshot)
-   * 2. Submit them to Claude with continuation prompt
-   * 3. Get the next plan (could be another intermediate or final)
-   */
   private async continueAfterIntermediatePlan(state: IterativeAutomationState): Promise<{
     success: boolean;
     isComplete: boolean;
@@ -762,9 +720,6 @@ export class IterativeAutomationService {
       return { success: false, isComplete: true, error: 'No plan available' };
     }
 
-    // CRITICAL: We must provide tool_result blocks for ALL tool_use blocks from the plan
-    // Anthropic API requires this - you cannot skip any tool_result blocks
-    
     const toolResultBlocks: Anthropic.Messages.ToolResultBlockParam[] = [];
     
     // Process ALL steps in the plan and create tool_result blocks
@@ -789,16 +744,7 @@ export class IterativeAutomationService {
           tool_use_id: step.toolUseId,
           content: JSON.stringify(contextData, null, 2)
         });
-      } else if (step.toolName === 'take_snapshot') {
-        const snapshotData = result.value;
-        toolResultBlocks.push({
-          type: 'tool_result',
-          tool_use_id: step.toolUseId,
-          content: JSON.stringify(snapshotData, null, 2)
-        });
       } else {
-        // For regular automation tools (navigate, click, type, etc.)
-        // Just provide a simple success message
         toolResultBlocks.push({
           type: 'tool_result',
           tool_use_id: step.toolUseId,
@@ -811,7 +757,7 @@ export class IterativeAutomationService {
       }
     }
 
-    console.log(`   Submitting ${toolResultBlocks.length} tool_result blocks (${state.currentPlan.steps.length} steps in plan)`);
+    console.log(`Submitting ${toolResultBlocks} tool_result blocks (${state.currentPlan.steps.length} steps in plan)`);
 
     // Build continuation prompt
     const lastCompletedPlan = state.completedPlans[state.completedPlans.length - 1];
@@ -828,9 +774,9 @@ export class IterativeAutomationService {
         summary: es.result?.effects?.summary
       })),
       extractedContext: state.executedSteps.length > 0 && state.executedSteps[state.executedSteps.length - 1].result ? {
-        url: state.executedSteps[state.executedSteps.length - 1].result!.url,
-        interactiveElements: state.executedSteps[state.executedSteps.length - 1].result!.context?.dom?.stats?.interactiveElements || 0,
-        forms: state.executedSteps[state.executedSteps.length - 1].result!.context?.dom?.forms?.length || 0
+        url: state.executedSteps[state.executedSteps.length - 1].result.url,
+        interactiveElements: state.executedSteps[state.executedSteps.length - 1].result.context?.dom?.stats?.interactiveElements || 0,
+        forms: state.executedSteps[state.executedSteps.length - 1].result.context?.dom?.forms?.length || 0
       } : undefined,
       currentUrl: state.executedSteps[state.executedSteps.length - 1]?.result?.url || ''
     });
@@ -866,8 +812,6 @@ export class IterativeAutomationService {
 
     // Parse new plan
     const newPlan = AutomationPlanParser.parsePlan(response);
-    console.log(`📋 [IterativeAutomation] Phase ${state.phaseNumber} plan generated:`);
-    console.log(AutomationPlanParser.getSummary(newPlan));
 
     // Update current plan
     state.currentPlan = newPlan;

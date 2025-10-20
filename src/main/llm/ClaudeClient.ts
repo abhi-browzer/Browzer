@@ -62,10 +62,6 @@ export class ClaudeClient {
       });
     }
 
-    console.log('🤖 [ClaudeClient] Creating automation plan with Sonnet 4.5...');
-    console.log(`   Tools: ${tools.length}`);
-    console.log(`   Cached context: ${cachedContext ? 'Yes' : 'No'}`);
-
     try {
       const response = await this.client.messages.create({
         model: this.model,
@@ -78,14 +74,11 @@ export class ClaudeClient {
             content: userPrompt
           }
         ]
-        // Note: We're not using disable_parallel_tool_use because we want
-        // the model to decide the best execution order
       });
 
-      console.log('✅ [ClaudeClient] Plan created successfully');
-      console.log(`   Stop reason: ${response.stop_reason}`);
-      console.log(`   Content blocks: ${response.content.length}`);
-      console.log(`   Usage: ${JSON.stringify(response.usage)}`);
+      response.content.forEach((block) => {
+        console.log(block);
+      });
 
       return response;
 
@@ -130,11 +123,6 @@ export class ClaudeClient {
       });
     }
 
-    console.log('🔄 [ClaudeClient] Continuing conversation with Sonnet 4.5...');
-    console.log(`   Messages in history: ${messages.length}`);
-    console.log(`   Tools: ${tools.length}`);
-    console.log(`   Cached context: ${cachedContext ? 'Yes' : 'No'}`);
-
     try {
       const response = await this.client.messages.create({
         model: this.model,
@@ -144,10 +132,9 @@ export class ClaudeClient {
         messages: messages
       });
 
-      console.log('✅ [ClaudeClient] Conversation continued successfully');
-      console.log(`   Stop reason: ${response.stop_reason}`);
-      console.log(`   Content blocks: ${response.content.length}`);
-      console.log(`   Usage: ${JSON.stringify(response.usage)}`);
+      response.content.forEach((block) => {
+        console.log(block);
+      });
 
       return response;
 

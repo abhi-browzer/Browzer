@@ -43,16 +43,13 @@ export class AutomationPlanParser {
     let analysis = '';
     let stepOrder = 0;
 
-    console.log('📋 [AutomationPlanParser] Parsing automation plan...');
-    console.log(`   Content blocks: ${response.content.length}`);
-    console.log(`   Stop reason: ${response.stop_reason}`);
 
     // Iterate through content blocks
     for (const block of response.content) {
       if (block.type === 'text') {
         // Text blocks contain Claude's analysis/explanation
         analysis += block.text + '\n';
-        console.log(`   [Text] ${block.text.substring(0, 100)}...`);
+        // console.log(`   [Text] ${block.text}`);
       } else if (block.type === 'tool_use') {
         // Tool use blocks are the actual automation steps
         steps.push({
@@ -61,7 +58,7 @@ export class AutomationPlanParser {
           input: block.input,
           order: stepOrder++
         });
-        console.log(`   [Tool ${stepOrder}] ${block.name}`);
+        // console.log(`   [Tool ${stepOrder}] ${block.name}`);
       }
     }
 
@@ -69,11 +66,11 @@ export class AutomationPlanParser {
     const planType = this.detectPlanType(analysis, steps);
     const reasoning = this.extractPlanReasoning(analysis);
 
-    console.log(`✅ [AutomationPlanParser] Parsed ${steps.length} automation steps`);
-    console.log(`   Plan type: ${planType}`);
-    if (reasoning) {
-      console.log(`   Reasoning: ${reasoning.substring(0, 100)}...`);
-    }
+    // console.log(`✅ [AutomationPlanParser] Parsed ${steps.length} automation steps`);
+    // console.log(`   Plan type: ${planType}`);
+    // if (reasoning) {
+    //   console.log(`   Reasoning: ${reasoning}`);
+    // }
 
     return {
       steps,

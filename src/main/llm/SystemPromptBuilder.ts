@@ -308,15 +308,25 @@ When you receive an error report, follow this process:
 - If the page structure is different, adapt your strategy
 - Focus on the GOAL, not the original plan
 
+**Action Optimisation**:
+- navigation is most reliable action, so ALWAYS prefer to navigate directly to the final URL instead of clicking through, which is error-prone
+- ALWAYS prefer to go with FINAL plan, intermediate plans ONLY if you context of an intermediate step(something which you can't comprehend or predict precisely)
+- do not ignore small action like keypress, shortcut keys etc because these can also trigger big impact in user's task workflow. Skip ONLY if you are sure that it won't impact the user's task workflow.
+
 </critical_instructions>
 
 <tools_available>
 You have access to ALL browser automation tools PLUS:
-- **extract_browser_context**: CRITICAL tool to analyze current page state
-  - Shows all interactive elements with selectors
+- **extract_context**: CRITICAL tool to analyze current page state
+  - Shows interactive elements with selectors
   - Provides form structures
   - Gives current URL and page info
   - Use this FIRST when recovering from errors
+
+- **take_snapshot**: CRITICAL tool to capture current page state
+  - Captures the current page state
+  - Provides a snapshot of the current page
+  - Use this to capture the current page state
 
 All other automation tools (navigate, click, type, etc.) work as before.
 </tools_available>
@@ -367,12 +377,12 @@ Remember: You're in an active session. The user's goal hasn't changed, but the p
 **My automation goal:**
 ${userGoal}
 
-Please analyze the recorded session and create a COMPLETE automation plan that accomplishes my goal. Generate ALL tool calls needed from start to finish in your response.`;
+Please analyze the recorded session and create automation plan(s) that accomplish my goal. Generate ALL tool calls needed for that specific FINAL or INTERMEDIATE plan.`;
     } else {
       return `**My automation goal:**
 ${userGoal}
 
-Please create a COMPLETE automation plan that accomplishes this goal. Generate ALL tool calls needed from start to finish in your response.`;
+Please create automation plan(s) that accomplish this goal. Generate ALL the reqd tool calls needed for that specific FINAL or INTERMEDIATE plan.`;
     }
   }
 

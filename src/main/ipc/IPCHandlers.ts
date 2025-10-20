@@ -462,7 +462,7 @@ export class IPCHandlers {
         console.log(`  Goal: ${userGoal}`);
         console.log(`  Recording ID: ${recordedSessionId}`);
 
-        const result = await this.browserManager.executeLLMAutomation(userGoal, recordedSessionId);
+        const result = await this.browserManager.executeIterativeAutomation(userGoal, recordedSessionId);
 
         console.log('[IPC] LLM automation completed:', result.success ? '✅ SUCCESS' : '❌ FAILED');
         if (result.usage) {

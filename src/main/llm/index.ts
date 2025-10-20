@@ -14,5 +14,4 @@
 export { ClaudeClient } from './ClaudeClient';
 export { SystemPromptBuilder } from './SystemPromptBuilder';
 export { AutomationPlanParser, ParsedAutomationPlan, ParsedAutomationStep } from './AutomationPlanParser';
-export { LLMAutomationService, LLMAutomationResult } from './LLMAutomationService';
 export { IterativeAutomationService, IterativeAutomationResult } from './IterativeAutomationService';

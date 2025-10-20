@@ -182,7 +182,7 @@ IMPORTANT: Don't assume name attribute exists. Modern sites often use id, data-*
         },
         backupSelectors: {
           type: 'array',
-          description: `REQUIRED: 2-3 backup selectors. Use different attribute types. Examples:
+          description: `REQUIRED: at least 2 backup selectors. Use different attribute types. Examples:
 ["input[placeholder='Username']", "input[type='text']", "[aria-label='Username']"]
 ["#email", "input[name='email']", "input[type='email']"]`,
           items: { type: 'string' }
@@ -225,7 +225,7 @@ Default: false`,
         },
         backupSelectors: {
           type: 'array',
-          description: 'Backup selectors for the select element',
+          description: 'Backup selectors for the select element. Use different attribute types.',
           items: { type: 'string' }
         },
         value: {
