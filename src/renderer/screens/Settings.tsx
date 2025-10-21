@@ -6,7 +6,7 @@ import { PrivacySettings } from '@/renderer/components/settings/PrivacySettings'
 import { AppearanceSettings } from '@/renderer/components/settings/AppearanceSettings';
 import { AutomationSettings } from '@/renderer/components/settings/AutomationSettings';
 import { AppSettings } from '@/shared/types';
-import { Settings as SettingsIcon, Shield, Palette, Sparkles } from 'lucide-react';
+import { Settings as SettingsIcon, Shield, Palette, Sparkles, Loader2Icon } from 'lucide-react';
 import { toast } from 'sonner';
 
 export function Settings() {
@@ -70,16 +70,16 @@ export function Settings() {
   if (!settings) {
     return (
       <div className='flex h-full items-center justify-center'>
-        <div className='text-muted-foreground'>Loading settings...</div>
+        <Loader2Icon className='animate-spin size-4' />
       </div>
     );
   }
 
   return (
-    <div className='flex h-full flex-col bg-background'>
+    <section className='flex h-full flex-col bg-slate-200'>
       {/* Header */}
-      <div className='border-b px-8 py-6'>
-        <h1 className='text-2xl font-semibold'>Settings</h1>
+      <div className='border-b px-8 py-2'>
+        <h1 className='text-xl font-semibold'>Settings</h1>
         <p className='text-muted-foreground mt-1 text-sm'>
           Manage your browser preferences and configuration
         </p>
@@ -166,6 +166,6 @@ export function Settings() {
           </div>
         </Tabs>
       </div>
-    </div>
+    </section>
   );
 }
