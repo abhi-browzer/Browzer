@@ -76,7 +76,7 @@ export function Settings() {
   }
 
   return (
-    <section className='flex h-full flex-col bg-slate-200'>
+    <section className='flex h-full flex-col bg-background'>
       {/* Header */}
       <div className='border-b px-8 py-2'>
         <h1 className='text-xl font-semibold'>Settings</h1>
