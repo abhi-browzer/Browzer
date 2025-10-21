@@ -89,10 +89,8 @@ export interface BrowserAPI {
   // LLM Automation
   executeLLMAutomation: (userGoal: string, recordedSessionId: string) => Promise<{
     success: boolean;
-    error?: string;
-    plan?: any;
-    executionResults?: any[];
-    usage?: any;
+    sessionId: string;
+    message: string;
   }>;
 
   // Event listeners
@@ -102,6 +100,11 @@ export interface BrowserAPI {
   onRecordingStopped: (callback: (data: { actions: any[]; duration: number; startUrl: string }) => void) => () => void;
   onRecordingSaved: (callback: (session: any) => void) => () => void;
   onRecordingDeleted: (callback: (id: string) => void) => () => void;
+  
+  // Automation event listeners
+  onAutomationProgress: (callback: (data: { sessionId: string; event: any }) => void) => () => void;
+  onAutomationComplete: (callback: (data: { sessionId: string; result: any }) => void) => () => void;
+  onAutomationError: (callback: (data: { sessionId: string; error: string }) => void) => () => void;
 }
 
 // Expose protected methods that allow the renderer process to use
@@ -249,6 +252,23 @@ const browserAPI: BrowserAPI = {
   // LLM Automation API
   executeLLMAutomation: (userGoal: string, recordedSessionId: string) =>
     ipcRenderer.invoke('automation:execute-llm', userGoal, recordedSessionId),
+  
+  // Automation event listeners
+  onAutomationProgress: (callback) => {
+    const subscription = (_: any, data: any) => callback(data);
+    ipcRenderer.on('automation:progress', subscription);
+    return () => ipcRenderer.removeListener('automation:progress', subscription);
+  },
+  onAutomationComplete: (callback) => {
+    const subscription = (_: any, data: any) => callback(data);
+    ipcRenderer.on('automation:complete', subscription);
+    return () => ipcRenderer.removeListener('automation:complete', subscription);
+  },
+  onAutomationError: (callback) => {
+    const subscription = (_: any, data: any) => callback(data);
+    ipcRenderer.on('automation:error', subscription);
+    return () => ipcRenderer.removeListener('automation:error', subscription);
+  },
 };
 
 contextBridge.exposeInMainWorld('browserAPI', browserAPI);

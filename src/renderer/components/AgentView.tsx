@@ -1,304 +1,379 @@
-import { useState, useEffect, useRef } from 'react';
-import { Bot, Settings } from 'lucide-react';
-import { Button } from '@/renderer/ui/button';
-import { ScrollArea } from '@/renderer/ui/scroll-area';
-import { Input } from '@/renderer/ui/input';
-import { Label } from '@/renderer/ui/label';
-import { toast } from 'sonner';
+import React, { useEffect, useRef, useState } from 'react';
+import { useAutomationStore } from '../stores/automationStore';
 import { RecordingSession } from '@/shared/types';
-import { ChatMessage, ChatMessageData } from './agent/ChatMessage';
-import { AutomationStatus } from './agent/AutomationStatus';
-import { RecordingSelector } from './agent/RecordingSelector';
-import { PromptInput } from './agent/PromptInput';
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../ui/select';
+import { InputGroup, InputGroupTextarea, InputGroupAddon, InputGroupButton } from '../ui/input-group';
+import { Loader2, CheckCircle2, XCircle, Brain, Zap, ArrowUp } from 'lucide-react';
+import { ScrollArea } from '../ui/scroll-area';
+import { Card } from '../ui/card';
+import { Badge } from '../ui/badge';
 
-interface AutomationStep {
-  id: string;
-  action: string;
-  description: string;
-  status: 'pending' | 'running' | 'completed' | 'failed';
-  error?: string;
-}
-
-export default function AgentView() {
-  // State
-  const [messages, setMessages] = useState<ChatMessageData[]>([]);
-  const [userPrompt, setUserPrompt] = useState('');
-  const [selectedSession, setSelectedSession] = useState<string>('');
-  const [sessions, setSessions] = useState<RecordingSession[]>([]);
-  const [isExecuting, setIsExecuting] = useState(false);
-  const [apiKey, setApiKey] = useState('');
-  const [showSettings, setShowSettings] = useState(false);
-  const [currentSteps, setCurrentSteps] = useState<AutomationStep[]>([]);
-  const [completedCount, setCompletedCount] = useState(0);
-  const [totalCount, setTotalCount] = useState(0);
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  // Load recordings and API key on mount
+/**
+ * AgentView - Agentic Automation Interface
+ * 
+ * Features:
+ * - Persistent state across tab switches and sidebar toggles
+ * - Real-time progress updates via IPC events
+ * - Professional minimalist UI with shadcn components
+ * - Auto-scrolling chat area
+ * - Session-based automation tracking
+ */
+ export default function AgentView() {
+  // Zustand store - persisted state
+  const {
+    currentSession,
+    selectedRecordingId,
+    userPrompt,
+    setSelectedRecording,
+    setUserPrompt,
+    startAutomation,
+    addEvent,
+    completeAutomation,
+    errorAutomation,
+  } = useAutomationStore();
+  
+  // Local state
+  const [recordings, setRecordings] = useState<RecordingSession[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Refs
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  
+  // Auto-scroll to bottom when new events arrive
+  useEffect(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [currentSession?.events]);
+  
+  // Load recordings on mount
   useEffect(() => {
     loadRecordings();
-    loadApiKey();
   }, []);
-
-  // Auto-scroll to bottom when messages or steps change
+  
+  // Subscribe to automation events
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
-    }
-  }, [messages, currentSteps]);
-
+    // Progress events
+    const unsubProgress = window.browserAPI.onAutomationProgress((data) => {
+      console.log('[AgentView] Progress:', data);
+      addEvent(data.sessionId, data.event);
+    });
+    
+    // Completion events
+    const unsubComplete = window.browserAPI.onAutomationComplete((data) => {
+      console.log('[AgentView] Complete:', data);
+      completeAutomation(data.sessionId, data.result);
+      setIsSubmitting(false);
+    });
+    
+    // Error events
+    const unsubError = window.browserAPI.onAutomationError((data) => {
+      console.log('[AgentView] Error:', data);
+      errorAutomation(data.sessionId, data.error);
+      setIsSubmitting(false);
+    });
+    
+    // Cleanup subscriptions on unmount
+    return () => {
+      unsubProgress();
+      unsubComplete();
+      unsubError();
+    };
+  }, [addEvent, completeAutomation, errorAutomation]);
+  
+  // Load recordings
   const loadRecordings = async () => {
     try {
-      const recordings = await window.browserAPI.getAllRecordings();
-      setSessions(recordings || []);
+      const allRecordings = await window.browserAPI.getAllRecordings();
+      setRecordings(allRecordings);
     } catch (error) {
-      console.error('Failed to load recordings:', error);
+      console.error('[AgentView] Failed to load recordings:', error);
     }
   };
-
-  const loadApiKey = async () => {
-    try {
-      const settings = await window.browserAPI.getSettingsCategory('automation');
-      if (settings?.apiKey) {
-        setApiKey(settings.apiKey);
-      }
-    } catch (error) {
-      console.error('Failed to load API key:', error);
-    }
-  };
-
-  const saveApiKey = async () => {
-    try {
-      await window.browserAPI.updateSetting('automation', 'apiKey', apiKey);
-      toast.success('API key saved successfully');
-      setShowSettings(false);
-    } catch (error) {
-      toast.error('Failed to save API key');
-      console.error(error);
-    }
-  };
-
-  const addMessage = (message: Omit<ChatMessageData, 'id' | 'timestamp'>) => {
-    const newMessage: ChatMessageData = {
-      ...message,
-      id: `msg-${Date.now()}-${Math.random()}`,
-      timestamp: Date.now()
-    };
-    setMessages(prev => [...prev, newMessage]);
-  };
-
-  const handleExecute = async () => {
-    if (!userPrompt.trim() || !selectedSession) {
-      toast.error('Please enter a prompt and select a recording');
+  
+  // Handle submit
+  const handleSubmit = async () => {
+    if (!userPrompt.trim() || !selectedRecordingId || isSubmitting) {
       return;
     }
-
-    if (!apiKey) {
-      toast.error('Please configure your Anthropic API key in settings');
-      setShowSettings(true);
-      return;
-    }
-
-    setIsExecuting(true);
-    setCurrentSteps([]);
-    setCompletedCount(0);
-    setTotalCount(0);
-
-    // Add user message
-    addMessage({
-      type: 'user',
-      content: userPrompt
-    });
-
-    // Find selected session
-    const session = sessions.find(s => s.id === selectedSession);
-    if (!session) {
-      toast.error('Selected recording not found');
-      setIsExecuting(false);
-      return;
-    }
-
+    
+    setIsSubmitting(true);
+    
     try {
-      addMessage({
-        type: 'system',
-        content: `🤖 Generating automation plan using recording: "${session.name}"...`
-      });
-
-      // Execute LLM automation with new API
-      const result = await window.browserAPI.executeLLMAutomation(userPrompt, selectedSession);
-
+      const result = await window.browserAPI.executeLLMAutomation(
+        userPrompt,
+        selectedRecordingId
+      );
+      
       if (result.success) {
-        const plan = result.plan as any;
-        const usage = result.usage as any;
-        
-        addMessage({
-          type: 'system',
-          content: `✅ Automation completed successfully!\n\n` +
-            `Steps executed: ${plan?.totalSteps || 0}\n` +
-            `Cost: $${usage?.totalCost?.toFixed(4) || '0.0000'}\n` +
-            `Tokens: ${usage?.inputTokens || 0} in, ${usage?.outputTokens || 0} out`
-        });
-        toast.success('Automation completed!');
+        // Start session in store
+        startAutomation(userPrompt, selectedRecordingId, result.sessionId);
       } else {
-        addMessage({
-          type: 'system',
-          content: `❌ Automation failed: ${result.error}`
-        });
-        toast.error('Automation failed');
+        console.error('[AgentView] Failed to start automation');
+        setIsSubmitting(false);
       }
-
     } catch (error) {
-      addMessage({
-        type: 'system',
-        content: `❌ Error: ${(error as Error).message}`
-      });
-      toast.error('Automation failed');
-      console.error('Automation error:', error);
-    } finally {
-      setIsExecuting(false);
-      setUserPrompt('');
-      setCurrentSteps([]);
-      setCompletedCount(0);
-      setTotalCount(0);
+      console.error('[AgentView] Error starting automation:', error);
+      setIsSubmitting(false);
     }
   };
-
-  const handleCancel = async () => {
-    // Note: Cancellation not yet implemented for LLM automation
-    // For now, just reset the UI state
-    addMessage({
-      type: 'system',
-      content: '🛑 Automation cancelled by user (Note: In-progress automation will continue)'
-    });
-    setIsExecuting(false);
-    setCurrentSteps([]);
-    toast.info('UI reset - automation may still be running');
+  
+  // Handle Enter key
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit();
+    }
   };
-
-  // Settings View
-  if (showSettings) {
-    return (
-      <div className="h-full flex flex-col p-4 space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold flex items-center gap-2">
-            <Settings className="w-5 h-5" />
-            Automation Settings
-          </h3>
-          <Button variant="ghost" size="sm" onClick={() => setShowSettings(false)}>
-            Back
-          </Button>
-        </div>
-
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="api-key">Anthropic API Key</Label>
-            <Input
-              id="api-key"
-              type="password"
-              placeholder="sk-ant-..."
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-            />
-            <p className="text-xs text-gray-500">
-              Get your API key from{' '}
-              <a
-                href="https://console.anthropic.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-500 hover:underline"
-              >
-                console.anthropic.com
-              </a>
-            </p>
-          </div>
-
-          <Button onClick={saveApiKey} className="w-full">
-            Save API Key
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  // Main View
+  
   return (
-    <div className="h-full flex flex-col">
-      {/* Header with Recording Selector */}
-      <div className="border-b bg-background">
-        <div className="flex items-center gap-2 px-3 py-2">
-          <div className="flex-1">
-            <RecordingSelector
-              sessions={sessions}
-              selectedSession={selectedSession}
-              onSessionChange={setSelectedSession}
-              disabled={isExecuting}
-            />
+    <div className="flex flex-col h-full bg-background">
+      {/* Header - Fixed */}
+      <div className="flex-shrink-0 border-b bg-card px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
+              <Brain className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold">Agentic Automation</h2>
+              <p className="text-sm text-muted-foreground">
+                AI-powered browser automation
+              </p>
+            </div>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setShowSettings(true)}
-            title="Settings"
-            className="h-8 w-8 shrink-0"
+          
+          {currentSession && (
+            <Badge variant={
+              currentSession.status === 'running' ? 'default' :
+              currentSession.status === 'completed' ? 'success' :
+              'destructive'
+            }>
+              {currentSession.status === 'running' && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
+              {currentSession.status === 'completed' && <CheckCircle2 className="w-3 h-3 mr-1" />}
+              {currentSession.status === 'error' && <XCircle className="w-3 h-3 mr-1" />}
+              {currentSession.status}
+            </Badge>
+          )}
+        </div>
+        
+        {/* Recording Selector */}
+        <div className="mt-4">
+          <label className="text-sm font-medium mb-2 block">
+            Select Recording Session
+          </label>
+          <Select
+            value={selectedRecordingId || undefined}
+            onValueChange={setSelectedRecording}
+            disabled={currentSession?.status === 'running'}
           >
-            <Settings className="w-4 h-4" />
-          </Button>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Choose a recorded session..." />
+            </SelectTrigger>
+            <SelectContent>
+              {recordings.map((recording) => (
+                <SelectItem key={recording.id} value={recording.id}>
+                  <div className="flex flex-col">
+                    <span className="font-medium">{recording.name || 'Untitled Session'}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(recording.createdAt).toLocaleString()} • {recording.actionCount} actions
+                    </span>
+                  </div>
+                </SelectItem>
+              ))}
+              {recordings.length === 0 && (
+                <div className="p-4 text-center text-sm text-muted-foreground">
+                  No recordings found. Record a session first.
+                </div>
+              )}
+            </SelectContent>
+          </Select>
         </div>
       </div>
-
-      {/* Chat Messages Area - Scrollable */}
-      <div className="flex-1 overflow-hidden">
-        <ScrollArea className="h-full">
-          <div className="px-3 py-2 space-y-2 min-h-full">
-            {/* Empty State */}
-            {messages.length === 0 && !isExecuting && (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center py-12">
-                  <Bot className="w-12 h-12 mx-auto text-gray-600 mb-3" />
-                  <h3 className="text-lg font-semibold text-gray-300 mb-2">
-                    AI Browser Automation
-                  </h3>
-                  <p className="text-sm text-gray-500 max-w-sm mx-auto">
-                    Select a recorded session and describe what you want to automate.
-                    The AI will generate and execute the automation plan.
-                  </p>
+      
+      {/* Chat Area - Scrollable */}
+      <ScrollArea className="flex-1 px-6 py-4" ref={scrollAreaRef}>
+        {!currentSession ? (
+          <EmptyState />
+        ) : (
+          <div className="space-y-4">
+            {/* User Goal */}
+            <Card className="p-4 bg-primary/5 border-primary/20">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                  <span className="text-sm font-medium">You</span>
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium mb-1">Goal</p>
+                  <p className="text-sm">{currentSession.userGoal}</p>
                 </div>
               </div>
-            )}
-
-            {/* Messages */}
-            {messages.map((message) => (
-              <ChatMessage key={message.id} message={message} />
+            </Card>
+            
+            {/* Events */}
+            {currentSession.events.map((event) => (
+              <EventItem key={event.id} event={event} />
             ))}
-
-            {/* Current Execution Status */}
-            {isExecuting && (
-              <AutomationStatus
-                isExecuting={isExecuting}
-                steps={currentSteps}
-                completedCount={completedCount}
-                totalCount={totalCount}
-              />
+            
+            {/* Final Result */}
+            {currentSession.status === 'completed' && currentSession.result && (
+              <Card className="p-4 bg-green-500/5 border-green-500/20">
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium mb-2">Automation Completed</p>
+                    <div className="text-xs text-muted-foreground space-y-1">
+                      <p>Steps: {currentSession.result.totalStepsExecuted}</p>
+                      <p>Recovery Attempts: {currentSession.result.recoveryAttempts}</p>
+                      {currentSession.result.usage && (
+                        <p>Cost: ${currentSession.result.usage.totalCost.toFixed(4)}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </Card>
             )}
-
-            {/* Scroll anchor */}
-            <div ref={scrollRef} />
+            
+            {/* Error */}
+            {currentSession.status === 'error' && currentSession.error && (
+              <Card className="p-4 bg-red-500/5 border-red-500/20">
+                <div className="flex items-start gap-3">
+                  <XCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium mb-2">Automation Failed</p>
+                    <p className="text-xs text-muted-foreground">{currentSession.error}</p>
+                  </div>
+                </div>
+              </Card>
+            )}
+            
+            <div ref={chatEndRef} />
           </div>
-        </ScrollArea>
-      </div>
-
-      {/* Input Area - Sticky at bottom */}
-      <div className="border-t bg-background shrink-0">
-        <div className="px-3 py-2">
-          <PromptInput
+        )}
+      </ScrollArea>
+      
+      {/* Footer - Fixed */}
+      <div className="flex-shrink-0 border-t bg-card px-6 py-4">
+        <InputGroup>
+          <InputGroupTextarea
+            placeholder="Describe what you want to automate..."
             value={userPrompt}
-            onChange={setUserPrompt}
-            onExecute={handleExecute}
-            onCancel={handleCancel}
-            isExecuting={isExecuting}
-            disabled={!selectedSession || !apiKey}
+            onChange={(e) => setUserPrompt(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={!selectedRecordingId || isSubmitting || currentSession?.status === 'running'}
+            rows={2}
           />
-        </div>
+          <InputGroupAddon align="block-end">
+            <InputGroupButton
+              variant="default"
+              className="rounded-full"
+              size="icon-xs"
+              onClick={handleSubmit}
+              disabled={!userPrompt.trim() || !selectedRecordingId || isSubmitting || currentSession?.status === 'running'}
+            >
+              {isSubmitting || currentSession?.status === 'running' ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <ArrowUp className="w-3 h-3" />
+              )}
+              <span className="sr-only">Send</span>
+            </InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
+        <p className="text-xs text-muted-foreground mt-2">
+          Press Enter to submit • Shift+Enter for new line
+        </p>
       </div>
     </div>
+  );
+}
+
+/**
+ * Empty State Component
+ */
+function EmptyState() {
+  return (
+    <div className="flex flex-col items-center justify-center h-full text-center p-8">
+      <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+        <Zap className="w-8 h-8 text-primary" />
+      </div>
+      <h3 className="text-lg font-semibold mb-2">Ready to Automate</h3>
+      <p className="text-sm text-muted-foreground max-w-md">
+        Select a recorded session and describe what you want to automate.
+        The AI agent will analyze the recording and execute the automation for you.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Event Item Component
+ */
+function EventItem({ event }: { event: any }) {
+  const getEventIcon = () => {
+    switch (event.type) {
+      case 'claude_thinking':
+        return <Brain className="w-4 h-4 text-purple-500 animate-pulse" />;
+      case 'plan_generated':
+        return <CheckCircle2 className="w-4 h-4 text-green-500" />;
+      case 'step_start':
+        return <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />;
+      case 'step_complete':
+        return <CheckCircle2 className="w-4 h-4 text-green-500" />;
+      case 'step_error':
+        return <XCircle className="w-4 h-4 text-red-500" />;
+      default:
+        return <Zap className="w-4 h-4 text-gray-500" />;
+    }
+  };
+  
+  const getEventTitle = () => {
+    switch (event.type) {
+      case 'claude_thinking':
+        return 'Claude is thinking...';
+      case 'plan_generated':
+        return 'Plan Generated';
+      case 'step_start':
+        return `Executing: ${event.data.toolName || 'Step'}`;
+      case 'step_complete':
+        return `Completed: ${event.data.toolName || 'Step'}`;
+      case 'step_error':
+        return `Error: ${event.data.toolName || 'Step'}`;
+      case 'error_recovery':
+        return 'Recovering from error...';
+      case 'intermediate_continue':
+        return 'Continuing automation...';
+      default:
+        return event.type;
+    }
+  };
+  
+  return (
+    <Card className="p-3">
+      <div className="flex items-start gap-3">
+        <div className="flex-shrink-0 mt-0.5">
+          {getEventIcon()}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium mb-1">{getEventTitle()}</p>
+          {event.data.message && (
+            <p className="text-xs text-muted-foreground">{event.data.message}</p>
+          )}
+          {event.data.reasoning && (
+            <p className="text-xs text-muted-foreground mt-1">{event.data.reasoning}</p>
+          )}
+          <p className="text-xs text-muted-foreground mt-1">
+            {new Date(event.timestamp).toLocaleTimeString()}
+          </p>
+        </div>
+      </div>
+    </Card>
   );
 }
