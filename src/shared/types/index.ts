@@ -6,3 +6,4 @@ export * from './history';
 export * from './user';
 export * from './context';
 export * from './automation';
+export * from './settings';
