@@ -9,6 +9,16 @@ import Anthropic from "@anthropic-ai/sdk";
  * Designed for LLM-based automation with detailed error reporting and effect tracking.
  */
 
+/**
+ * Progress event types for real-time UI updates
+ */
+export interface AutomationProgressEvent {
+  type: string;
+  data: any;
+  timestamp: number;
+}
+
+
 // ============================================================================
 // Tool Parameter Types
 // ============================================================================

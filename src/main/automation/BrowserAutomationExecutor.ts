@@ -109,7 +109,18 @@ export class BrowserAutomationExecutor {
         return this.captureViewportSnapshot(params);
       
       default:
-        throw new Error(`Unknown tool: ${toolName}`);
+        return this.createErrorResult(toolName, Date.now(), {
+          code: 'EXECUTION_ERROR',
+          message: `Unknown tool: ${toolName}`,
+          details: {
+            lastError: `Unknown tool: ${toolName}`,
+            suggestions: [
+              'Check tool name for typos',
+              'Verify tool is supported by the current browser',
+              'Check if page has JavaScript errors'
+            ]
+          }
+        });
     }
   }
 
@@ -126,41 +137,20 @@ export class BrowserAutomationExecutor {
   }): Promise<ToolExecutionResult> {
     const startTime = Date.now();
 
-    try {
-      const full = params.full ?? false;
-      const maxElements = params.maxElements ?? 200;
-      const contextType = full ? 'FULL' : 'VIEWPORT';
+    const full = params.full ?? false;
+    const maxElements = params.maxElements ?? 200;
 
-      console.log(`[Automation] 🔍 Extracting ${contextType} context...`);
+    // Use unified smart context extraction
+    const result = await this.contextExtractor.extractSmartContext(
+      this.tabId,
+      full,
+      params.scrollTo,
+      maxElements
+    );
 
-      // Use unified smart context extraction
-      const result = await this.contextExtractor.extractSmartContext(
-        this.tabId,
-        full,
-        params.scrollTo,
-        maxElements
-      );
-
-      if (!result.success || !result.context) {
-        return this.createErrorResult('extract_context', startTime, {
-          code: 'EXECUTION_ERROR',
-          message: result.error || 'Failed to extract context',
-          details: {
-            lastError: result.error,
-            suggestions: [
-              'Page may still be loading',
-              full ? 'Try with full=false for viewport-only extraction' : 'Try with full=true for complete page context',
-              'If scrolling to element, verify selector is correct',
-              'Check if page has JavaScript errors'
-            ]
-          }
-        });
-      }
-
+    if (result.success && result.context) {
       const context = result.context;
       const executionTime = Date.now() - startTime;
-
-      console.log(`[Automation] ✅ ${contextType} context extracted: ${context.dom.stats.interactiveElements} elements (${executionTime}ms)`);
 
       return {
         success: true,
@@ -171,21 +161,21 @@ export class BrowserAutomationExecutor {
         tabId: this.tabId,
         url: context.url
       };
-
-    } catch (error) {
-      return this.createErrorResult('extract_context', startTime, {
-        code: 'EXECUTION_ERROR',
-        message: `Context extraction failed: ${error instanceof Error ? error.message : String(error)}`,
-        details: {
-          lastError: error instanceof Error ? error.message : String(error),
-          suggestions: [
-            'Page may be in an unstable state',
-            'Try waiting before extracting context',
-            'Check browser console for errors'
-          ]
-        }
-      });
     }
+
+    return this.createErrorResult('extract_context', startTime, {
+      code: 'EXECUTION_ERROR',
+      message: result.error || 'Failed to extract context',
+      details: {
+        lastError: result.error,
+        suggestions: [
+          'Page may still be loading',
+          full ? 'Try with full=false for viewport-only extraction' : 'Try with full=true for complete page context',
+          'If scrolling to element, verify selector is correct',
+          'Check if page has JavaScript errors'
+        ]
+      }
+    });
   }
 
   /**
@@ -198,45 +188,11 @@ export class BrowserAutomationExecutor {
     };
   }): Promise<ToolExecutionResult> {
     const startTime = Date.now();
-
-    try {
-      console.log('[Automation] 📸 Capturing viewport snapshot...');
-
-      const scrollTo = params.scrollTo || 'current';
-
-      // Log scroll action
-      if (scrollTo !== 'current') {
-        if (typeof scrollTo === 'object' && scrollTo.element) {
-          console.log(`[Automation] 📜 Scrolling to element: ${scrollTo.element}`);
-        } else {
-          console.log(`[Automation] 📜 Scrolling to: ${scrollTo}`);
-        }
-      }
-
-      // Capture snapshot using ViewportSnapshotCapture
-      const result = await this.snapshotCapture.captureSnapshot(scrollTo);
-
-      if (!result.success || !result.image) {
-        return this.createErrorResult('take_snapshot', startTime, {
-          code: 'EXECUTION_ERROR',
-          message: result.error || 'Failed to capture viewport snapshot',
-          details: {
-            lastError: result.error,
-            suggestions: [
-              'Page may still be loading',
-              'If scrolling to element, verify selector is correct',
-              'Try with scrollTo: "current" to capture without scrolling',
-              'Check if page has rendering issues'
-            ]
-          }
-        });
-      }
-
-      const executionTime = Date.now() - startTime;
-
-      console.log(`[Automation] ✅ Snapshot captured: ${result.image.width}x${result.image.height} (~${result.image.estimatedTokens} tokens, ${executionTime}ms)`);
-
-      // Return snapshot in Claude-compatible format
+    const scrollTo = params.scrollTo || 'current';
+    const result = await this.snapshotCapture.captureSnapshot(scrollTo);
+    const executionTime = Date.now() - startTime;
+    
+    if (result.success && result.image) {
       return {
         success: true,
         toolName: 'take_snapshot',
@@ -259,23 +215,22 @@ export class BrowserAutomationExecutor {
         timestamp: Date.now(),
         tabId: this.tabId,
         url: this.view.webContents.getURL()
-      } as ToolExecutionResult;
-
-    } catch (error) {
-      return this.createErrorResult('take_snapshot', startTime, {
-        code: 'EXECUTION_ERROR',
-        message: `Snapshot capture failed: ${error instanceof Error ? error.message : String(error)}`,
-        details: {
-          lastError: error instanceof Error ? error.message : String(error),
-          suggestions: [
-            'Page may be in an unstable state',
-            'If scrolling to element, check if element exists',
-            'Try capturing without scrolling first',
-            'Check browser console for errors'
-          ]
-        }
-      });
+      } as ToolExecutionResult; 
     }
+
+    return this.createErrorResult('take_snapshot', startTime, {
+      code: 'EXECUTION_ERROR',
+      message: result.error || 'Failed to capture viewport snapshot',
+      details: {
+        lastError: result.error,
+        suggestions: [
+          'Page may still be loading',
+          'If scrolling to element, verify selector is correct',
+          'Try with scrollTo: "current" to capture without scrolling',
+          'Check if page has rendering issues'
+        ]
+      }
+    });
   }
 
   /**

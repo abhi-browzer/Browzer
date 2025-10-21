@@ -52,8 +52,7 @@ export class BrowserManager {
   private lastActiveTabId: string | null = null;
   private activeVideoRecorder: VideoRecorder | null = null;
 
-  // LLM Automation Service
-  private llmAutomationService: IterativeAutomationService;
+  private automationSessions: Map<string, IterativeAutomationService> = new Map();
 
   constructor(baseWindow: BaseWindow, chromeHeight: number, agentUIView?: WebContentsView) {
     this.baseWindow = baseWindow;
@@ -63,18 +62,8 @@ export class BrowserManager {
     this.historyService = new HistoryService();
     this.passwordManager = new PasswordManager();
     
-    // Initialize centralized recorder (without view initially)
     this.centralRecorder = new ActionRecorder();
     
-    // Initialize LLM Automation Service (will use active tab's executor)
-    // We'll pass a dummy executor for now, actual executor is per-tab
-    const dummyView = new WebContentsView();
-    const dummyExecutor = new BrowserAutomationExecutor(dummyView, 'init');
-    this.llmAutomationService = new IterativeAutomationService(
-      dummyExecutor,
-      this.recordingStore,
-      process.env.ANTHROPIC_API_KEY
-    );
     
     // Create initial tab
     this.createTab('https://www.google.com');
@@ -86,7 +75,6 @@ export class BrowserManager {
   public createTab(url?: string): TabInfo {
     const tabId = `tab-${++this.tabCounter}`;
     
-    // Create WebContentsView for this tab (sandboxed)
     const view = new WebContentsView({
       webPreferences: {
         preload: path.join(__dirname, 'preload.js'),
@@ -98,8 +86,6 @@ export class BrowserManager {
       },
     });
 
-    // Set white background for web content
-    view.setBackgroundColor('#ffffff');
 
     let displayUrl = url ?? 'https://www.google.com';
     let displayTitle = 'New Tab';
@@ -111,7 +97,6 @@ export class BrowserManager {
       displayTitle = INTERNAL_PAGES.find(page => page.path === pathName).title || 'New Tab';
     }
 
-    // Create tab info
     const tabInfo: TabInfo = {
       id: tabId,
       title: displayTitle,
@@ -121,7 +106,6 @@ export class BrowserManager {
       canGoForward: false,
     };
 
-    // Create tab with view and info
     const tab: Tab = {
       id: tabId,
       view,
@@ -137,27 +121,21 @@ export class BrowserManager {
       automationExecutor: new BrowserAutomationExecutor(view, tabId),
     };
 
-    // Store tab
     this.tabs.set(tabId, tab);
 
-    // Setup WebContents event listeners
     this.setupTabEvents(tab);
 
     this.initializeTabDebugger(tab).catch(err => 
       console.error('[BrowserManager] Failed to initialize debugger for tab:', tabId, err)
     );
 
-    // Add view to window (hidden initially)
     this.baseWindow.contentView.addChildView(view);
     
-    // Position the view with current sidebar width
     this.updateTabViewBounds(view, this.currentSidebarWidth);
 
-    // Load URL (always load, even if no URL provided, use default)
     const urlToLoad = url || 'https://www.google.com';
     view.webContents.loadURL(this.normalizeURL(urlToLoad));
 
-    // Switch to new tab
     this.switchToTab(tabId);
 
     return tabInfo;
@@ -530,54 +508,71 @@ export class BrowserManager {
   }
 
   /**
-   * Execute LLM-powered automation on the active tab
+   * Execute LLM-powered automation on the active tab (NON-BLOCKING)
    * 
    * @param userGoal - What the user wants to automate
    * @param recordedSessionId - ID of recorded session to use as reference
-   * @returns Automation result
+   * @returns Session info for tracking
    */
   public async executeIterativeAutomation(
     userGoal: string,
     recordedSessionId: string
   ): Promise<{
     success: boolean;
-    error?: string;
-    plan?: unknown;
-    executionResults?: unknown[];
-    usage?: unknown;
+    sessionId: string;
+    message: string;
   }> {
-    console.log('[BrowserManager] Starting LLM automation...');
-    console.log(`  Goal: ${userGoal}`);
-    console.log(`  Recording ID: ${recordedSessionId}`);
 
     const tab = this.tabs.get(this.activeTabId);
 
+    const sessionId = `automation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-    // Create a new LLM service instance with the active tab's executor
     const llmService = new IterativeAutomationService(
       tab.automationExecutor,
       this.recordingStore,
       process.env.ANTHROPIC_API_KEY
     );
 
-    // Execute automation
-    try {
-      const result = await llmService.executeAutomation(userGoal, recordedSessionId, 20);
-      
-      console.log('[BrowserManager] LLM automation completed');
-      console.log(`  Success: ${result.success}`);
-      if (result.usage) {
-        console.log(`  Cost: $${result.usage.totalCost.toFixed(4)}`);
-      }
+    this.automationSessions.set(sessionId, llmService);
 
-      return result;
-    } catch (error) {
-      console.error('[BrowserManager] LLM automation failed:', error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      };
-    }
+    llmService.on('progress', (event) => {
+      if (this.agentUIView && !this.agentUIView.webContents.isDestroyed()) {
+        this.agentUIView.webContents.send('automation:progress', {
+          sessionId,
+          event
+        });
+      }
+    });
+
+    llmService.executeAutomation(userGoal, recordedSessionId, 20)
+      .then(result => {
+        if (this.agentUIView && !this.agentUIView.webContents.isDestroyed()) {
+          this.agentUIView.webContents.send('automation:complete', {
+            sessionId,
+            result
+          });
+        }
+
+        this.automationSessions.delete(sessionId);
+      })
+      .catch(error => {
+        console.error('[BrowserManager] LLM automation failed:', error);
+        
+        if (this.agentUIView && !this.agentUIView.webContents.isDestroyed()) {
+          this.agentUIView.webContents.send('automation:error', {
+            sessionId,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          });
+        }
+
+        this.automationSessions.delete(sessionId);
+      });
+
+    return {
+      success: true,
+      sessionId,
+      message: 'Automation started successfully'
+    };
   }
 
   /**

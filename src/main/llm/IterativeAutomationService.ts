@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { EventEmitter } from 'events';
 import { BrowserAutomationExecutor } from '@/main/automation/BrowserAutomationExecutor';
 import { RecordingStore } from '@/main/recording';
 import { ClaudeClient } from './clients/ClaudeClient';
@@ -13,6 +14,7 @@ import { MessageBuilder } from './builders/MessageBuilder';
 import { AutomationPlanParser, ParsedAutomationPlan } from './parsers/AutomationPlanParser';
 import { IterativeAutomationResult, PlanExecutionResult, UsageStats } from './core/types';
 import Anthropic from '@anthropic-ai/sdk';
+import { AutomationProgressEvent } from '@/shared/types';
 
 /**
  * IterativeAutomationService - Smart ReAct-based browser automation orchestrator
@@ -34,7 +36,7 @@ import Anthropic from '@anthropic-ai/sdk';
  * 6. Repeat until success or max recovery attempts
  * 
  */
-export class IterativeAutomationService {
+export class IterativeAutomationService extends EventEmitter {
   // External dependencies
   private executor: BrowserAutomationExecutor;
   private recordingStore: RecordingStore;
@@ -55,10 +57,24 @@ export class IterativeAutomationService {
     recordingStore: RecordingStore,
     apiKey?: string
   ) {
+    super(); // Initialize EventEmitter
     this.executor = executor;
     this.recordingStore = recordingStore;
     this.claudeClient = new ClaudeClient(apiKey);
     this.toolRegistry = new ToolRegistry();
+  }
+
+  /**
+   * Emit progress event for real-time UI updates
+   */
+  private emitProgress(type: string, data: any): void {
+    const event: AutomationProgressEvent = {
+      type,
+      data,
+      timestamp: Date.now()
+    };
+    this.emit('progress', event);
+    console.log(`[AutomationProgress] ${type}:`, data);
   }
 
   /**
@@ -91,6 +107,9 @@ export class IterativeAutomationService {
     this.usageTracker = new UsageTracker();
 
     try {
+      // Emit automation started event
+      this.emitProgress('claude_thinking', { message: 'Generating automation plan...' });
+
       // Step 1: Generate initial plan
       const initialPlan = await this.generateInitialPlan();
       this.usageTracker.addUsage(initialPlan.usage);
@@ -98,6 +117,14 @@ export class IterativeAutomationService {
       this.stateManager.addMessage({
         role: 'assistant',
         content: initialPlan.response.content
+      });
+
+      // Emit plan generated event
+      this.emitProgress('plan_generated', {
+        plan: initialPlan.plan,
+        planType: initialPlan.plan.planType,
+        totalSteps: initialPlan.plan.totalSteps,
+        reasoning: initialPlan.plan.reasoning
       });
 
       // Step 2: Execute plan with error recovery loop
@@ -116,6 +143,15 @@ export class IterativeAutomationService {
 
       // Return final result
       const finalResult = this.stateManager.getFinalResult();
+      
+      // Emit completion event
+      this.emitProgress('automation_complete', {
+        success: finalResult.success,
+        totalSteps: this.stateManager.getTotalStepsExecuted(),
+        recoveryAttempts: this.stateManager.getRecoveryAttempts(),
+        usage: this.usageTracker.getTotalUsage()
+      });
+
       return {
         success: finalResult.success,
         plan: this.stateManager.getCurrentPlan(),
@@ -128,6 +164,13 @@ export class IterativeAutomationService {
 
     } catch (error: any) {
       console.error('❌ [IterativeAutomation] Fatal error:', error);
+      
+      // Emit error event
+      this.emitProgress('automation_error', {
+        error: error.message || 'Unknown error occurred',
+        stack: error.stack
+      });
+
       return {
         success: false,
         executionResults: this.stateManager?.getExecutedSteps() || [],
