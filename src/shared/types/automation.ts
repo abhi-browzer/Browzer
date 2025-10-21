@@ -12,10 +12,63 @@ import Anthropic from "@anthropic-ai/sdk";
 /**
  * Progress event types for real-time UI updates
  */
+export type AutomationEventType =
+  | 'automation_started'
+  | 'claude_thinking'
+  | 'claude_response'
+  | 'plan_generated'
+  | 'plan_executing'
+  | 'step_start'
+  | 'step_progress'
+  | 'step_complete'
+  | 'step_error'
+  | 'error_recovery_start'
+  | 'error_recovery_complete'
+  | 'intermediate_plan_start'
+  | 'intermediate_plan_complete'
+  | 'plan_complete'
+  | 'automation_complete'
+  | 'automation_error';
+
 export interface AutomationProgressEvent {
-  type: string;
+  type: AutomationEventType;
   data: any;
   timestamp: number;
+}
+
+/**
+ * Detailed step execution event data
+ */
+export interface StepExecutionData {
+  stepNumber: number;
+  totalSteps: number;
+  toolName: string;
+  toolUseId: string;
+  params?: any;
+  result?: any;
+  error?: any;
+  duration?: number;
+  status: 'pending' | 'running' | 'success' | 'error';
+}
+
+/**
+ * Claude thinking/response data
+ */
+export interface ClaudeThinkingData {
+  message: string;
+  thinking?: string;
+  reasoning?: string;
+  planType?: 'intermediate' | 'final';
+}
+
+/**
+ * Plan execution data
+ */
+export interface PlanExecutionData {
+  planType: 'intermediate' | 'final';
+  totalSteps: number;
+  reasoning?: string;
+  expectedNextSteps?: string;
 }
 
 

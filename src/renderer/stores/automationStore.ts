@@ -107,8 +107,40 @@ export const useAutomationStore = create<AutomationStore>()(
           return; // Ignore events from old sessions
         }
         
+        // For step_complete and step_error, update the existing step_start event
+        if (event.type === 'step_complete' || event.type === 'step_error') {
+          const toolUseId = event.data.toolUseId;
+          const existingEventIndex = currentSession.events.findIndex(
+            e => e.type === 'step_start' && e.data.toolUseId === toolUseId
+          );
+          
+          if (existingEventIndex !== -1) {
+            // Update the existing event
+            const updatedEvents = [...currentSession.events];
+            updatedEvents[existingEventIndex] = {
+              ...updatedEvents[existingEventIndex],
+              type: event.type,
+              data: {
+                ...updatedEvents[existingEventIndex].data,
+                ...event.data,
+                status: event.type === 'step_complete' ? 'success' : 'error'
+              },
+              timestamp: event.timestamp
+            };
+            
+            set({
+              currentSession: {
+                ...currentSession,
+                events: updatedEvents
+              }
+            });
+            return;
+          }
+        }
+        
+        // For other events, add as new
         const eventItem: AutomationEventItem = {
-          id: `${sessionId}-${Date.now()}-${Math.random()}`,
+          id: `${event.data.toolUseId || sessionId}-${Date.now()}-${Math.random()}`,
           sessionId,
           type: event.type,
           data: event.data,

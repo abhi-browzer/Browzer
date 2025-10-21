@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { EventEmitter } from 'events';
 import { BrowserAutomationExecutor } from '@/main/automation/BrowserAutomationExecutor';
 import { AutomationStateManager } from './AutomationStateManager';
 import { PlanExecutionResult, ExecutedStep } from './types';
@@ -13,6 +14,7 @@ import { ParsedAutomationPlan, ParsedAutomationStep } from '../parsers/Automatio
  * - Handle step failures
  * - Detect special tools (extract_context, take_snapshot)
  * - Return execution results
+ * - Emit real-time progress events
  * 
  * This module centralizes plan execution logic for:
  * - Consistent execution flow
@@ -23,13 +25,16 @@ import { ParsedAutomationPlan, ParsedAutomationStep } from '../parsers/Automatio
 export class PlanExecutor {
   private executor: BrowserAutomationExecutor;
   private stateManager: AutomationStateManager;
+  private eventEmitter?: EventEmitter;
 
   constructor(
     executor: BrowserAutomationExecutor,
-    stateManager: AutomationStateManager
+    stateManager: AutomationStateManager,
+    eventEmitter: EventEmitter
   ) {
     this.executor = executor;
     this.stateManager = stateManager;
+    this.eventEmitter = eventEmitter;
   }
 
   /**
@@ -38,7 +43,8 @@ export class PlanExecutor {
    */
   public async executeStep(
     step: ParsedAutomationStep,
-    stepNumber: number
+    stepNumber: number,
+    totalSteps: number
   ): Promise<{
     success: boolean;
     shouldContinue: boolean;
@@ -48,9 +54,27 @@ export class PlanExecutor {
   }> {
     console.log(`🔧 [Step ${stepNumber}] Executing ${step.toolName}...`);
 
+    // Emit step start event
+    this.eventEmitter.emit('progress', {
+      type: 'step_start',
+      data: {
+        stepNumber,
+        totalSteps,
+        toolName: step.toolName,
+        toolUseId: step.toolUseId,
+        params: step.input,
+        status: 'running'
+      },
+      timestamp: Date.now()
+    });
+
     try {
+      const startTime = Date.now();
+      
       // Execute the tool
       const result = await this.executor.executeTool(step.toolName, step.input);
+      
+      const duration = Date.now() - startTime;
 
       // Analysis tools (extract_context, take_snapshot) are ONLY special if they're the last step
       // If there are more steps after them, they execute normally
@@ -68,8 +92,24 @@ export class PlanExecutor {
       this.stateManager.addExecutedStep(executedStep);
 
       // Check if execution failed
-      if (!result.success) {
+      if (!result.success || result.error) {
         console.error(`   ❌ Step ${stepNumber} failed: ${result.error?.message || 'Unknown error'}`);
+        
+        // Emit step error event
+        this.eventEmitter.emit('progress', {
+          type: 'step_error',
+          data: {
+            stepNumber,
+            totalSteps,
+            toolName: step.toolName,
+            toolUseId: step.toolUseId,
+            error: result.error,
+            duration,
+            status: 'error'
+          },
+          timestamp: Date.now()
+        });
+        
         return {
           success: false,
           shouldContinue: false,
@@ -81,6 +121,22 @@ export class PlanExecutor {
 
       // Success
       console.log(`   ✅ Step ${stepNumber} completed`);
+      
+      // Emit step complete event
+      this.eventEmitter.emit('progress', {
+        type: 'step_complete',
+        data: {
+          stepNumber,
+          totalSteps,
+          toolName: step.toolName,
+          toolUseId: step.toolUseId,
+          result: result,
+          duration,
+          status: 'success'
+        },
+        timestamp: Date.now()
+      });
+      
       return {
         success: true,
         shouldContinue: true,
@@ -118,12 +174,14 @@ export class PlanExecutor {
    * - An analysis tool is encountered AS THE LAST STEP (triggers continuation)
    */
   public async executePlan(plan: ParsedAutomationPlan): Promise<PlanExecutionResult> {
+    const totalSteps = plan.steps.length;
+    
     for (let i = 0; i < plan.steps.length; i++) {
       const step = plan.steps[i];
       const stepNumber = this.stateManager.getExecutedSteps().length + 1;
       const isLastStep = i === plan.steps.length - 1;
 
-      const stepResult = await this.executeStep(step, stepNumber);
+      const stepResult = await this.executeStep(step, stepNumber, totalSteps);
 
       // Handle step failure
       if (!stepResult.success) {

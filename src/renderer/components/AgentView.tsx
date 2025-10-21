@@ -9,23 +9,23 @@ import {
   SelectValue,
 } from '../ui/select';
 import { InputGroup, InputGroupTextarea, InputGroupAddon, InputGroupButton } from '../ui/input-group';
-import { Loader2, CheckCircle2, XCircle, Brain, Zap, ArrowUp } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, Brain, Zap, ArrowUp, AlertCircle, Sparkles } from 'lucide-react';
 import { ScrollArea } from '../ui/scroll-area';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
+import { cn } from '../lib/utils';
 
 /**
- * AgentView - Agentic Automation Interface
+ * Enhanced AgentView - Cursor-like Professional UI
  * 
  * Features:
- * - Persistent state across tab switches and sidebar toggles
- * - Real-time progress updates via IPC events
- * - Professional minimalist UI with shadcn components
- * - Auto-scrolling chat area
- * - Session-based automation tracking
+ * - Cursor-style thinking/execution display
+ * - Real-time step progress with animations
+ * - Professional minimalist design
+ * - Smooth transitions and loading states
+ * - Rich context and visual feedback
  */
- export default function AgentView() {
-  // Zustand store - persisted state
+export default function AgentView() {
   const {
     currentSession,
     selectedRecordingId,
@@ -38,49 +38,38 @@ import { Badge } from '../ui/badge';
     errorAutomation,
   } = useAutomationStore();
   
-  // Local state
   const [recordings, setRecordings] = useState<RecordingSession[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
-  // Refs
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
   
-  // Auto-scroll to bottom when new events arrive
+  // Auto-scroll to bottom
   useEffect(() => {
     if (chatEndRef.current) {
       chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [currentSession?.events]);
   
-  // Load recordings on mount
+  // Load recordings
   useEffect(() => {
     loadRecordings();
   }, []);
   
   // Subscribe to automation events
   useEffect(() => {
-    // Progress events
     const unsubProgress = window.browserAPI.onAutomationProgress((data) => {
-      console.log('[AgentView] Progress:', data);
       addEvent(data.sessionId, data.event);
     });
     
-    // Completion events
     const unsubComplete = window.browserAPI.onAutomationComplete((data) => {
-      console.log('[AgentView] Complete:', data);
       completeAutomation(data.sessionId, data.result);
       setIsSubmitting(false);
     });
     
-    // Error events
     const unsubError = window.browserAPI.onAutomationError((data) => {
-      console.log('[AgentView] Error:', data);
       errorAutomation(data.sessionId, data.error);
       setIsSubmitting(false);
     });
     
-    // Cleanup subscriptions on unmount
     return () => {
       unsubProgress();
       unsubComplete();
@@ -88,7 +77,6 @@ import { Badge } from '../ui/badge';
     };
   }, [addEvent, completeAutomation, errorAutomation]);
   
-  // Load recordings
   const loadRecordings = async () => {
     try {
       const allRecordings = await window.browserAPI.getAllRecordings();
@@ -98,7 +86,6 @@ import { Badge } from '../ui/badge';
     }
   };
   
-  // Handle submit
   const handleSubmit = async () => {
     if (!userPrompt.trim() || !selectedRecordingId || isSubmitting) {
       return;
@@ -113,10 +100,8 @@ import { Badge } from '../ui/badge';
       );
       
       if (result.success) {
-        // Start session in store
         startAutomation(userPrompt, selectedRecordingId, result.sessionId);
       } else {
-        console.error('[AgentView] Failed to start automation');
         setIsSubmitting(false);
       }
     } catch (error) {
@@ -125,7 +110,6 @@ import { Badge } from '../ui/badge';
     }
   };
   
-  // Handle Enter key
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -134,133 +118,81 @@ import { Badge } from '../ui/badge';
   };
   
   return (
-    <div className="flex flex-col h-full bg-background">
-      {/* Header - Fixed */}
-      <div className="flex-shrink-0 border-b bg-card px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
-              <Brain className="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold">Agentic Automation</h2>
-              <p className="text-sm text-muted-foreground">
-                AI-powered browser automation
-              </p>
-            </div>
-          </div>
+    <div className="flex flex-col h-screen bg-background overflow-hidden">
+      {/* Header */}
+      <div className="flex-shrink-0 border-b bg-card/50 backdrop-blur-sm px-6 py-4 z-10">
+        <div className="flex items-center justify-between mb-4">
           
           {currentSession && (
             <Badge variant={
               currentSession.status === 'running' ? 'default' :
               currentSession.status === 'completed' ? 'success' :
               'destructive'
-            }>
-              {currentSession.status === 'running' && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
-              {currentSession.status === 'completed' && <CheckCircle2 className="w-3 h-3 mr-1" />}
-              {currentSession.status === 'error' && <XCircle className="w-3 h-3 mr-1" />}
+            } className="gap-1.5">
+              {currentSession.status === 'running' && <Loader2 className="w-3 h-3 animate-spin" />}
+              {currentSession.status === 'completed' && <CheckCircle2 className="w-3 h-3" />}
+              {currentSession.status === 'error' && <XCircle className="w-3 h-3" />}
               {currentSession.status}
             </Badge>
           )}
         </div>
         
-        {/* Recording Selector */}
-        <div className="mt-4">
-          <label className="text-sm font-medium mb-2 block">
-            Select Recording Session
-          </label>
-          <Select
-            value={selectedRecordingId || undefined}
-            onValueChange={setSelectedRecording}
-            disabled={currentSession?.status === 'running'}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Choose a recorded session..." />
-            </SelectTrigger>
-            <SelectContent>
-              {recordings.map((recording) => (
-                <SelectItem key={recording.id} value={recording.id}>
-                  <div className="flex flex-col">
-                    <span className="font-medium">{recording.name || 'Untitled Session'}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {new Date(recording.createdAt).toLocaleString()} • {recording.actionCount} actions
-                    </span>
-                  </div>
-                </SelectItem>
-              ))}
-              {recordings.length === 0 && (
-                <div className="p-4 text-center text-sm text-muted-foreground">
-                  No recordings found. Record a session first.
+        <Select
+          value={selectedRecordingId || undefined}
+          onValueChange={setSelectedRecording}
+          disabled={currentSession?.status === 'running'}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Select a recorded session..." />
+          </SelectTrigger>
+          <SelectContent>
+            {recordings.map((recording) => (
+              <SelectItem key={recording.id} value={recording.id}>
+                <div className="flex flex-col">
+                  <span className="font-medium">{recording.name || 'Untitled Session'}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(recording.createdAt).toLocaleString()} • {recording.actionCount} actions
+                  </span>
                 </div>
-              )}
-            </SelectContent>
-          </Select>
-        </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       
-      {/* Chat Area - Scrollable */}
-      <ScrollArea className="flex-1 px-6 py-4" ref={scrollAreaRef}>
+      {/* Chat Area */}
+      <div className="flex-1 overflow-hidden">
+        <ScrollArea className="h-full px-6 py-4">
         {!currentSession ? (
           <EmptyState />
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3 max-w-4xl mx-auto">
             {/* User Goal */}
-            <Card className="p-4 bg-primary/5 border-primary/20">
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                  <span className="text-sm font-medium">You</span>
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium mb-1">Goal</p>
-                  <p className="text-sm">{currentSession.userGoal}</p>
-                </div>
-              </div>
-            </Card>
+            <UserGoalCard goal={currentSession.userGoal} />
             
             {/* Events */}
-            {currentSession.events.map((event) => (
-              <EventItem key={event.id} event={event} />
+            {currentSession.events.map((event, index) => (
+              <EventCard key={event.id} event={event} index={index} />
             ))}
             
-            {/* Final Result */}
+            {/* Completion */}
             {currentSession.status === 'completed' && currentSession.result && (
-              <Card className="p-4 bg-green-500/5 border-green-500/20">
-                <div className="flex items-start gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium mb-2">Automation Completed</p>
-                    <div className="text-xs text-muted-foreground space-y-1">
-                      <p>Steps: {currentSession.result.totalStepsExecuted}</p>
-                      <p>Recovery Attempts: {currentSession.result.recoveryAttempts}</p>
-                      {currentSession.result.usage && (
-                        <p>Cost: ${currentSession.result.usage.totalCost.toFixed(4)}</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </Card>
+              <CompletionCard result={currentSession.result} />
             )}
             
             {/* Error */}
             {currentSession.status === 'error' && currentSession.error && (
-              <Card className="p-4 bg-red-500/5 border-red-500/20">
-                <div className="flex items-start gap-3">
-                  <XCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium mb-2">Automation Failed</p>
-                    <p className="text-xs text-muted-foreground">{currentSession.error}</p>
-                  </div>
-                </div>
-              </Card>
+              <ErrorCard error={currentSession.error} />
             )}
             
             <div ref={chatEndRef} />
           </div>
         )}
-      </ScrollArea>
+        </ScrollArea>
+      </div>
       
-      {/* Footer - Fixed */}
-      <div className="flex-shrink-0 border-t bg-card px-6 py-4">
+      {/* Footer */}
+      <div className="flex-shrink-0 border-t bg-card/50 backdrop-blur-sm px-6 py-4">
         <InputGroup>
           <InputGroupTextarea
             placeholder="Describe what you want to automate..."
@@ -269,6 +201,7 @@ import { Badge } from '../ui/badge';
             onKeyDown={handleKeyDown}
             disabled={!selectedRecordingId || isSubmitting || currentSession?.status === 'running'}
             rows={2}
+            className="resize-none"
           />
           <InputGroupAddon align="block-end">
             <InputGroupButton
@@ -283,7 +216,6 @@ import { Badge } from '../ui/badge';
               ) : (
                 <ArrowUp className="w-3 h-3" />
               )}
-              <span className="sr-only">Send</span>
             </InputGroupButton>
           </InputGroupAddon>
         </InputGroup>
@@ -296,13 +228,13 @@ import { Badge } from '../ui/badge';
 }
 
 /**
- * Empty State Component
+ * Empty State
  */
 function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center h-full text-center p-8">
-      <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-        <Zap className="w-8 h-8 text-primary" />
+      <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500/10 to-blue-500/10 flex items-center justify-center mb-4">
+        <Zap className="w-8 h-8 text-purple-500" />
       </div>
       <h3 className="text-lg font-semibold mb-2">Ready to Automate</h3>
       <p className="text-sm text-muted-foreground max-w-md">
@@ -314,64 +246,178 @@ function EmptyState() {
 }
 
 /**
- * Event Item Component
+ * User Goal Card
  */
-function EventItem({ event }: { event: any }) {
-  const getEventIcon = () => {
+function UserGoalCard({ goal }: { goal: string }) {
+  return (
+    <Card className="p-4 bg-gradient-to-br from-purple-500/5 to-blue-500/5 border-purple-500/20 animate-in fade-in slide-in-from-bottom-2 duration-300">
+      <div className="flex items-start gap-3">
+        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-purple-500/10 flex items-center justify-center">
+          <span className="text-sm font-medium text-purple-500">You</span>
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-medium mb-1">Goal</p>
+          <p className="text-sm text-foreground/90">{goal}</p>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * Event Card - Cursor-style
+ */
+function EventCard({ event, index }: { event: any; index: number }) {
+  const getEventDisplay = () => {
     switch (event.type) {
       case 'claude_thinking':
-        return <Brain className="w-4 h-4 text-purple-500 animate-pulse" />;
+        return {
+          icon: <Brain className="w-4 h-4 text-purple-500 animate-pulse" />,
+          title: 'Claude is thinking...',
+          content: event.data.message,
+          bgClass: 'bg-purple-500/5 border-purple-500/20',
+          showLoader: true
+        };
+        
+      case 'claude_response':
+        return {
+          icon: <Brain className="w-4 h-4 text-purple-500" />,
+          title: 'Claude',
+          content: event.data.message,
+          bgClass: 'bg-purple-500/5 border-purple-500/20',
+          metadata: event.data.reasoning
+        };
+        
       case 'plan_generated':
-        return <CheckCircle2 className="w-4 h-4 text-green-500" />;
+        return {
+          icon: <CheckCircle2 className="w-4 h-4 text-green-500" />,
+          title: `Plan Generated (${event.data.planType})`,
+          content: event.data.reasoning,
+          bgClass: 'bg-green-500/5 border-green-500/20',
+          metadata: `${event.data.totalSteps} steps`
+        };
+        
       case 'step_start':
-        return <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />;
+        return {
+          icon: <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />,
+          title: `Executing: ${event.data.toolName}`,
+          content: `Step ${event.data.stepNumber} of ${event.data.totalSteps}`,
+          bgClass: 'bg-blue-500/5 border-blue-500/20',
+          showLoader: true,
+          metadata: event.data.params ? JSON.stringify(event.data.params, null, 2) : undefined
+        };
+        
       case 'step_complete':
-        return <CheckCircle2 className="w-4 h-4 text-green-500" />;
+        return {
+          icon: <CheckCircle2 className="w-4 h-4 text-green-500" />,
+          title: `Completed: ${event.data.toolName}`,
+          content: `Step ${event.data.stepNumber} of ${event.data.totalSteps}`,
+          bgClass: 'bg-green-500/5 border-green-500/20',
+          metadata: event.data.duration ? `${event.data.duration}ms` : undefined
+        };
+        
       case 'step_error':
-        return <XCircle className="w-4 h-4 text-red-500" />;
+        return {
+          icon: <XCircle className="w-4 h-4 text-red-500" />,
+          title: `Failed: ${event.data.toolName}`,
+          content: event.data.error?.message || 'Unknown error',
+          bgClass: 'bg-red-500/5 border-red-500/20',
+          metadata: `Step ${event.data.stepNumber} of ${event.data.totalSteps}`
+        };
+        
+      case 'error_recovery_start':
+        return {
+          icon: <AlertCircle className="w-4 h-4 text-orange-500 animate-pulse" />,
+          title: 'Recovering from error...',
+          content: 'Claude is analyzing the error and generating a recovery plan',
+          bgClass: 'bg-orange-500/5 border-orange-500/20',
+          showLoader: true
+        };
+        
       default:
-        return <Zap className="w-4 h-4 text-gray-500" />;
+        return {
+          icon: <Zap className="w-4 h-4 text-gray-500" />,
+          title: event.type,
+          content: event.data.message || JSON.stringify(event.data),
+          bgClass: 'bg-muted/50 border-border'
+        };
     }
   };
   
-  const getEventTitle = () => {
-    switch (event.type) {
-      case 'claude_thinking':
-        return 'Claude is thinking...';
-      case 'plan_generated':
-        return 'Plan Generated';
-      case 'step_start':
-        return `Executing: ${event.data.toolName || 'Step'}`;
-      case 'step_complete':
-        return `Completed: ${event.data.toolName || 'Step'}`;
-      case 'step_error':
-        return `Error: ${event.data.toolName || 'Step'}`;
-      case 'error_recovery':
-        return 'Recovering from error...';
-      case 'intermediate_continue':
-        return 'Continuing automation...';
-      default:
-        return event.type;
-    }
-  };
+  const display = getEventDisplay();
   
   return (
-    <Card className="p-3">
+    <Card 
+      className={cn(
+        "p-4 animate-in fade-in slide-in-from-bottom-2",
+        display.bgClass
+      )}
+      style={{ animationDelay: `${index * 50}ms` }}
+    >
       <div className="flex items-start gap-3">
         <div className="flex-shrink-0 mt-0.5">
-          {getEventIcon()}
+          {display.icon}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium mb-1">{getEventTitle()}</p>
-          {event.data.message && (
-            <p className="text-xs text-muted-foreground">{event.data.message}</p>
+          <div className="flex items-center gap-2 mb-1">
+            <p className="text-sm font-medium">{display.title}</p>
+            {display.showLoader && (
+              <div className="flex gap-1">
+                <div className="w-1 h-1 rounded-full bg-current animate-bounce" style={{ animationDelay: '0ms' }} />
+                <div className="w-1 h-1 rounded-full bg-current animate-bounce" style={{ animationDelay: '150ms' }} />
+                <div className="w-1 h-1 rounded-full bg-current animate-bounce" style={{ animationDelay: '300ms' }} />
+              </div>
+            )}
+          </div>
+          {display.content && (
+            <p className="text-sm text-foreground/80 whitespace-pre-wrap">{display.content}</p>
           )}
-          {event.data.reasoning && (
-            <p className="text-xs text-muted-foreground mt-1">{event.data.reasoning}</p>
+          {display.metadata && (
+            <p className="text-xs text-muted-foreground mt-2">{display.metadata}</p>
           )}
-          <p className="text-xs text-muted-foreground mt-1">
+          <p className="text-xs text-muted-foreground mt-2">
             {new Date(event.timestamp).toLocaleTimeString()}
           </p>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * Completion Card
+ */
+function CompletionCard({ result }: { result: any }) {
+  return (
+    <Card className="p-4 bg-gradient-to-br from-green-500/5 to-emerald-500/5 border-green-500/20 animate-in fade-in slide-in-from-bottom-2">
+      <div className="flex items-start gap-3">
+        <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
+        <div className="flex-1">
+          <p className="text-sm font-medium mb-2">Automation Completed Successfully</p>
+          <div className="text-xs text-muted-foreground space-y-1">
+            <p>✓ Steps Executed: {result.totalStepsExecuted}</p>
+            <p>✓ Recovery Attempts: {result.recoveryAttempts}</p>
+            {result.usage && (
+              <p>✓ Cost: ${result.usage.totalCost.toFixed(4)}</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * Error Card
+ */
+function ErrorCard({ error }: { error: string }) {
+  return (
+    <Card className="p-4 bg-gradient-to-br from-red-500/5 to-rose-500/5 border-red-500/20 animate-in fade-in slide-in-from-bottom-2">
+      <div className="flex items-start gap-3">
+        <XCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+        <div className="flex-1">
+          <p className="text-sm font-medium mb-2">Automation Failed</p>
+          <p className="text-xs text-muted-foreground">{error}</p>
         </div>
       </div>
     </Card>

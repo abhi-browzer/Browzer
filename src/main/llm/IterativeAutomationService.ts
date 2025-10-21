@@ -14,7 +14,7 @@ import { MessageBuilder } from './builders/MessageBuilder';
 import { AutomationPlanParser, ParsedAutomationPlan } from './parsers/AutomationPlanParser';
 import { IterativeAutomationResult, PlanExecutionResult, UsageStats } from './core/types';
 import Anthropic from '@anthropic-ai/sdk';
-import { AutomationProgressEvent } from '@/shared/types';
+import { AutomationProgressEvent, AutomationEventType } from '@/shared/types';
 
 /**
  * IterativeAutomationService - Smart ReAct-based browser automation orchestrator
@@ -67,7 +67,7 @@ export class IterativeAutomationService extends EventEmitter {
   /**
    * Emit progress event for real-time UI updates
    */
-  private emitProgress(type: string, data: any): void {
+  private emitProgress(type: AutomationEventType, data: any): void {
     const event: AutomationProgressEvent = {
       type,
       data,
@@ -93,7 +93,7 @@ export class IterativeAutomationService extends EventEmitter {
     // Initialize session-specific managers
     const recordedSession = this.recordingStore.getRecording(recordedSessionId);
     this.stateManager = new AutomationStateManager(userGoal, recordedSession, maxRecoveryAttempts);
-    this.planExecutor = new PlanExecutor(this.executor, this.stateManager);
+    this.planExecutor = new PlanExecutor(this.executor, this.stateManager, this); // Pass event emitter
     this.errorRecoveryHandler = new ErrorRecoveryHandler(
       this.claudeClient,
       this.toolRegistry,
@@ -119,6 +119,21 @@ export class IterativeAutomationService extends EventEmitter {
         content: initialPlan.response.content
       });
 
+      // Extract Claude's thinking/reasoning text
+      const thinkingText = initialPlan.response.content
+        .filter((block: any) => block.type === 'text')
+        .map((block: any) => block.text)
+        .join('\n');
+      
+      // Emit Claude response event
+      if (thinkingText) {
+        this.emitProgress('claude_response', {
+          message: thinkingText,
+          reasoning: initialPlan.plan.reasoning,
+          planType: initialPlan.plan.planType
+        });
+      }
+      
       // Emit plan generated event
       this.emitProgress('plan_generated', {
         plan: initialPlan.plan,
@@ -249,12 +264,13 @@ export class IterativeAutomationService extends EventEmitter {
     }
 
     // Execute steps one by one
+    const totalSteps = currentPlan.steps.length;
     for (let i = 0; i < currentPlan.steps.length; i++) {
       const step = currentPlan.steps[i];
       const stepNumber = this.stateManager.getExecutedSteps().length + 1;
       const isLastStep = i === currentPlan.steps.length - 1;
 
-      const stepResult = await this.planExecutor.executeStep(step, stepNumber);
+      const stepResult = await this.planExecutor.executeStep(step, stepNumber, totalSteps);
 
       // Handle step failure - trigger error recovery
       if (!stepResult.success) {
