@@ -17,7 +17,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { AutomationProgressEvent, AutomationEventType } from '@/shared/types';
 
 /**
- * IterativeAutomationService - Smart ReAct-based browser automation orchestrator
+ * AutomationService - Smart ReAct-based browser automation orchestrator
  * 
  * **Architecture:**
  * - AutomationStateManager: Manages session state and conversation history
@@ -36,7 +36,7 @@ import { AutomationProgressEvent, AutomationEventType } from '@/shared/types';
  * 6. Repeat until success or max recovery attempts
  * 
  */
-export class IterativeAutomationService extends EventEmitter {
+export class AutomationService extends EventEmitter {
   // External dependencies
   private executor: BrowserAutomationExecutor;
   private recordingStore: RecordingStore;

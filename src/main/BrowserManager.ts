@@ -8,7 +8,7 @@ import { INTERNAL_PAGES } from '@/main/constants';
 import { stat } from 'fs/promises';
 import { PasswordUtil } from '@/main/utils/PasswordUtil';
 import { PasswordAutomation, BrowserAutomationExecutor } from './automation';
-import { IterativeAutomationService } from './llm';
+import { AutomationService } from './llm';
 
 // Internal tab structure (includes WebContentsView)
 interface Tab {
@@ -52,7 +52,7 @@ export class BrowserManager {
   private lastActiveTabId: string | null = null;
   private activeVideoRecorder: VideoRecorder | null = null;
 
-  private automationSessions: Map<string, IterativeAutomationService> = new Map();
+  private automationSessions: Map<string, AutomationService> = new Map();
 
   constructor(baseWindow: BaseWindow, chromeHeight: number, agentUIView?: WebContentsView) {
     this.baseWindow = baseWindow;
@@ -527,7 +527,7 @@ export class BrowserManager {
 
     const sessionId = `automation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-    const llmService = new IterativeAutomationService(
+    const llmService = new AutomationService(
       tab.automationExecutor,
       this.recordingStore,
       process.env.ANTHROPIC_API_KEY

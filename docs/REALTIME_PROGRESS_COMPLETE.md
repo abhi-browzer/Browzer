@@ -20,7 +20,7 @@
 
 ## Implementation Summary
 
-### 1. ✅ IterativeAutomationService (EventEmitter)
+### 1. ✅ AutomationService (EventEmitter)
 
 **Changes:**
 - Extended `EventEmitter` class
@@ -39,7 +39,7 @@
 
 **Code:**
 ```typescript
-export class IterativeAutomationService extends EventEmitter {
+export class AutomationService extends EventEmitter {
   private emitProgress(type: AutomationProgressEvent['type'], data: any): void {
     const event: AutomationProgressEvent = {
       type,
@@ -85,7 +85,7 @@ public async executeIterativeAutomation(
   const sessionId = `automation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   
   // Create service
-  const llmService = new IterativeAutomationService(...);
+  const llmService = new AutomationService(...);
   this.automationSessions.set(sessionId, llmService);
   
   // Listen to progress events

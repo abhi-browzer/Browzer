@@ -17,7 +17,7 @@ Main Process (IPC Handler)
   ↓ Start automation async
   ↓ Return immediately: { success: true, sessionId }
   ↓
-IterativeAutomationService (EventEmitter)
+AutomationService (EventEmitter)
   ↓ Emit progress events
   ↓ 'plan_generated', 'step_start', 'step_complete', etc.
   ↓
@@ -32,7 +32,7 @@ Renderer (UI)
 
 ## Implementation Steps
 
-### 1. ✅ Add EventEmitter to IterativeAutomationService
+### 1. ✅ Add EventEmitter to AutomationService
 - Extend EventEmitter
 - Define progress event types
 - Emit events at key points

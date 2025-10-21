@@ -4,4 +4,4 @@ export * from './utils';
 
 export { ClaudeClient } from './clients/ClaudeClient';
 export { AutomationPlanParser } from './parsers/AutomationPlanParser';
-export { IterativeAutomationService, IterativeAutomationResult } from './IterativeAutomationService';
+export { AutomationService, IterativeAutomationResult } from './AutomationService';
