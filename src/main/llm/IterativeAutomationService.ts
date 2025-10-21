@@ -17,8 +17,6 @@ import Anthropic from '@anthropic-ai/sdk';
 /**
  * IterativeAutomationService - Smart ReAct-based browser automation orchestrator
  * 
- * This service implements error-driven iterative automation with a clean modular architecture:
- * 
  * **Architecture:**
  * - AutomationStateManager: Manages session state and conversation history
  * - PlanExecutor: Executes automation plans step-by-step
@@ -35,11 +33,6 @@ import Anthropic from '@anthropic-ai/sdk';
  * 5. On intermediate plan: Generate next phase
  * 6. Repeat until success or max recovery attempts
  * 
- * **Benefits:**
- * - Clean separation of concerns
- * - Easy to debug and test
- * - Scalable for new features
- * - LLM-friendly code structure
  */
 export class IterativeAutomationService {
   // External dependencies

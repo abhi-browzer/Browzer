@@ -32,10 +32,7 @@ export function Sidebar() {
   }, [setActiveTab]);
 
   return (
-    <div className="h-full w-full flex flex-col ">
-      {/* Sidebar Header */}
-
-      {/* Main Tabs */}
+    <section className="h-full w-full flex flex-col ">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
         <TabsList className="w-full rounded-none p-0 h-auto">
           <TabsTrigger 
@@ -60,6 +57,6 @@ export function Sidebar() {
           <RecordingView />
         </TabsContent>
       </Tabs>
-    </div>
+    </section>
   );
 }

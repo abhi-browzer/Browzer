@@ -2,6 +2,7 @@ import Store from 'electron-store';
 import { RecordingSession } from '@/shared/types';
 import { unlink } from 'fs/promises';
 import { existsSync } from 'fs';
+import { dialog } from 'electron';
 
 interface StoreSchema {
   recordings: RecordingSession[];
@@ -48,6 +49,31 @@ export class RecordingStore {
   getRecording(id: string): RecordingSession | undefined {
     const recordings = this.store.get('recordings', []);
     return recordings.find(r => r.id === id);
+  }
+
+  async exportRecording(id: string): Promise<{ success: boolean; filePath?: string; error?: string }> {
+    const recording = this.getRecording(id);
+
+    const jsonString = JSON.stringify(recording, null, 2);
+    const fileName = `recording-${recording.name.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-${Date.now()}.json`;
+
+    // Use dialog to save file
+    const { filePath } = await dialog.showSaveDialog({
+      title: 'Export Recording',
+      defaultPath: fileName,
+      filters: [
+        { name: 'JSON Files', extensions: ['json'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    });
+
+    if (filePath) {
+      const { writeFile } = await import('fs/promises');
+      await writeFile(filePath, jsonString, 'utf-8');
+      return { success: true, filePath };
+    }
+
+    return { success: false, error: 'Failed to export recording' };
   }
 
   /**
