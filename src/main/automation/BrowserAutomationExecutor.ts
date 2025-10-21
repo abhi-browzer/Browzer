@@ -29,7 +29,6 @@ export class BrowserAutomationExecutor {
   private view: WebContentsView;
   private debugger: Electron.Debugger;
   private tabId: string;
-  private isAttached = false;
   private contextExtractor: BrowserContextExtractor;
   private snapshotCapture: ViewportSnapshotCapture;
 
@@ -44,9 +43,6 @@ export class BrowserAutomationExecutor {
     this.snapshotCapture = new ViewportSnapshotCapture(view);
   }
 
-  // ============================================================================
-  // Public Tool Methods - See implementation in separate file chunks
-  // ============================================================================
 
   /**
    * Execute a tool by name - Main entry point for LLM automation
@@ -143,10 +139,6 @@ export class BrowserAutomationExecutor {
     const startTime = Date.now();
 
     try {
-      await this.ensureDebuggerAttached();
-      console.log(`[Automation] 🎯 Advanced click on selector: ${params.selector}`);
-
-      // Wait for element if specified
       const waitTime = params.waitForElement ?? 1000;
       if (waitTime > 0) {
         await this.sleep(waitTime);
@@ -178,7 +170,7 @@ export class BrowserAutomationExecutor {
       // Step 2: Ensure element is in viewport and unobstructed
       const visibilityResult = await this.ensureElementClickable(
         elementResult.usedSelector,
-        elementResult.element!
+        elementResult.element
       );
 
       if (!visibilityResult.success) {
@@ -848,7 +840,6 @@ export class BrowserAutomationExecutor {
     const startTime = Date.now();
 
     try {
-      await this.ensureDebuggerAttached();
       console.log(`[Automation] ⌨️  Advanced type into: ${params.selector}`);
 
       const waitTime = params.waitForElement ?? 1000;
@@ -1215,7 +1206,6 @@ export class BrowserAutomationExecutor {
     const startTime = Date.now();
 
     try {
-      await this.ensureDebuggerAttached();
       console.log(`[Automation] Selecting from dropdown: ${params.selector}`);
 
       const waitTime = params.waitForElement ?? 1000;
@@ -1335,7 +1325,6 @@ export class BrowserAutomationExecutor {
     const startTime = Date.now();
 
     try {
-      await this.ensureDebuggerAttached();
       console.log(`[Automation] Setting checkbox ${params.checked ? 'checked' : 'unchecked'}: ${params.selector}`);
 
       const waitTime = params.waitForElement ?? 1000;
@@ -1458,8 +1447,6 @@ export class BrowserAutomationExecutor {
     const startTime = Date.now();
 
     try {
-      await this.ensureDebuggerAttached();
-
       const timeout = params.timeout || 10000;
       const state = params.state || 'visible';
       const interval = 100;
@@ -1560,7 +1547,6 @@ export class BrowserAutomationExecutor {
     const startTime = Date.now();
 
     try {
-      await this.ensureDebuggerAttached();
       console.log(`[Automation] Pressing key: ${params.key}`);
 
       // Focus element if specified
@@ -1640,7 +1626,6 @@ export class BrowserAutomationExecutor {
     const startTime = Date.now();
 
     try {
-      await this.ensureDebuggerAttached();
       console.log(`[Automation] Scrolling: ${JSON.stringify(params)}`);
 
       if (params.toElement) {
@@ -1732,7 +1717,6 @@ export class BrowserAutomationExecutor {
     const startTime = Date.now();
 
     try {
-      await this.ensureDebuggerAttached();
       console.log(`[Automation] Submitting form`);
 
       await this.capturePreActionState();
@@ -1811,19 +1795,6 @@ export class BrowserAutomationExecutor {
   // Helper Methods
   // ============================================================================
 
-  private async ensureDebuggerAttached(): Promise<void> {
-    if (!this.isAttached) {
-      if (!this.debugger.isAttached()) {
-        this.debugger.attach('1.3');
-      }
-      await this.debugger.sendCommand('DOM.enable');
-      await this.debugger.sendCommand('Page.enable');
-      await this.debugger.sendCommand('Runtime.enable');
-      await this.debugger.sendCommand('Network.enable');
-      await this.debugger.sendCommand('DOM.getDocument', { depth: -1 });
-      this.isAttached = true;
-    }
-  }
 
   private async findElement(selectors: string[], verifyVisible: boolean): Promise<ElementQueryResult> {
     for (let i = 0; i < selectors.length; i++) {

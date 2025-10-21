@@ -7,19 +7,9 @@ import {
   DOMContext,
 } from '@/shared/types/context';
 
-/**
- * BrowserContextExtractor - Advanced CDP-based browser context extraction
- * 
- * Uses Chrome DevTools Protocol to extract comprehensive browser context
- * for LLM-based automation and intelligent error recovery.
- * 
- * Features:
- * - DOM structure with semantic annotations
- */
 export class BrowserContextExtractor {
   private view: WebContentsView | null = null;
   private debugger: Electron.Debugger | null = null;
-  private isAttached = false;
 
   constructor(view?: WebContentsView) {
     if (view) {
@@ -27,9 +17,6 @@ export class BrowserContextExtractor {
     }
   }
 
-  /**
-   * Set the WebContentsView to extract context from
-   */
   public setView(view: WebContentsView): void {
     this.view = view;
     this.debugger = view.webContents.debugger;
@@ -60,8 +47,6 @@ export class BrowserContextExtractor {
     }
 
     try {
-      // Attach debugger if not already attached
-      const wasAttached = await this.ensureDebuggerAttached();
 
       // Extract only DOM context (optimized)
       const dom = opts.includeDOM ? await this.extractDOMContext(opts) : null;
@@ -78,11 +63,6 @@ export class BrowserContextExtractor {
         dom: dom as DOMContext,
       };
 
-      // Detach debugger if we attached it
-      if (!wasAttached && this.isAttached) {
-        await this.detachDebugger();
-      }
-
       const duration = Date.now() - startTime;
       console.log(`✅ Browser context extracted in ${duration}ms`);
 
@@ -94,15 +74,6 @@ export class BrowserContextExtractor {
 
     } catch (error) {
       console.error('Failed to extract browser context:', error);
-      
-      // Try to detach debugger on error
-      try {
-        if (this.isAttached) {
-          await this.detachDebugger();
-        }
-      } catch (detachError) {
-        console.error('Failed to detach debugger:', detachError);
-      }
 
       return {
         success: false,
@@ -145,8 +116,6 @@ export class BrowserContextExtractor {
     const startTime = Date.now();
 
     try {
-      // Attach debugger if not already attached
-      const wasAttached = await this.ensureDebuggerAttached();
 
       let dom: DOMContext;
 
@@ -186,11 +155,6 @@ export class BrowserContextExtractor {
         dom: dom as DOMContext,
       };
 
-      // Detach debugger if we attached it
-      if (!wasAttached && this.isAttached) {
-        await this.detachDebugger();
-      }
-
       const duration = Date.now() - startTime;
       const contextType = full ? 'FULL' : 'VIEWPORT';
       console.log(`✅ ${contextType} context extracted in ${duration}ms (${dom.stats.interactiveElements} elements)`);
@@ -203,15 +167,6 @@ export class BrowserContextExtractor {
 
     } catch (error) {
       console.error('Failed to extract context:', error);
-      
-      // Try to detach debugger on error
-      try {
-        if (this.isAttached) {
-          await this.detachDebugger();
-        }
-      } catch (detachError) {
-        console.error('Failed to detach debugger:', detachError);
-      }
 
       return {
         success: false,
@@ -634,52 +589,4 @@ export class BrowserContextExtractor {
   }
 
 
-  /**
-   * Ensure debugger is attached
-   */
-  private async ensureDebuggerAttached(): Promise<boolean> {
-    if (!this.debugger) {
-      throw new Error('Debugger not initialized');
-    }
-
-    const wasAttached = this.debugger.isAttached();
-    
-    if (!wasAttached) {
-      try {
-        this.debugger.attach('1.3');
-        this.isAttached = true;
-        
-        // Enable required domains
-        await Promise.all([
-          this.debugger.sendCommand('DOM.enable'),
-          this.debugger.sendCommand('Runtime.enable'),
-          this.debugger.sendCommand('Page.enable')
-        ]);
-        
-        console.log('✅ Debugger attached for context extraction');
-      } catch (error) {
-        console.error('Failed to attach debugger:', error);
-        throw error;
-      }
-    } else {
-      this.isAttached = true;
-    }
-
-    return wasAttached;
-  }
-
-  /**
-   * Detach debugger
-   */
-  private async detachDebugger(): Promise<void> {
-    if (this.debugger && this.isAttached) {
-      try {
-        this.debugger.detach();
-        this.isAttached = false;
-        console.log('✅ Debugger detached after context extraction');
-      } catch (error) {
-        console.error('Failed to detach debugger:', error);
-      }
-    }
-  }
 }

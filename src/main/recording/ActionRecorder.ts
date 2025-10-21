@@ -77,15 +77,6 @@ export class ActionRecorder {
     try {
       console.log(`🔄 Switching recording to tab: ${tabId} (${tabTitle})`);
 
-      // Detach from current debugger if attached
-      if (this.debugger && this.debugger.isAttached()) {
-        try {
-          this.debugger.detach();
-        } catch (error) {
-          console.warn('Error detaching previous debugger:', error);
-        }
-      }
-
       // Update to new view
       this.view = newView;
       this.debugger = newView.webContents.debugger;
@@ -94,12 +85,7 @@ export class ActionRecorder {
       this.currentTabTitle = tabTitle;
       this.currentWebContentsId = newView.webContents.id;
 
-      // Attach debugger to new view
-      this.debugger.attach('1.3');
-      console.log('✅ CDP Debugger attached to new tab');
-
-      // Re-enable CDP domains
-      await this.enableCDPDomains();
+      await this.injectEventTracker();
 
       // Re-setup event listeners
       this.setupEventListeners();
@@ -135,14 +121,6 @@ export class ActionRecorder {
     try {
       this.debugger = this.view.webContents.debugger;
       
-      // Attach debugger if not already attached (could be attached by PasswordAutomation)
-      if (!this.debugger.isAttached()) {
-        this.debugger.attach('1.3');
-        console.log('✅ CDP Debugger attached');
-      } else {
-        console.log('✅ CDP Debugger already attached, reusing existing connection');
-      }
-
       this.actions = [];
       this.isRecording = true;
 
@@ -159,7 +137,7 @@ export class ActionRecorder {
         await this.snapshotManager.initializeRecording(recordingId);
       }
 
-      await this.enableCDPDomains();
+      await this.injectEventTracker();
       this.setupEventListeners();
 
       console.log('🎬 Recording started');
@@ -180,9 +158,6 @@ export class ActionRecorder {
     }
 
     try {
-      if (this.debugger && this.debugger.isAttached()) {
-        this.debugger.detach();
-      }
 
       this.isRecording = false;
       this.actions.sort((a, b) => a.timestamp - b.timestamp);
@@ -274,40 +249,6 @@ export class ActionRecorder {
       }
     } catch (error) {
       console.error('Failed to update tab title:', error);
-    }
-  }
-
-  /**
-   * Enable required CDP domains
-   */
-  private async enableCDPDomains(): Promise<void> {
-    if (!this.debugger) {
-      throw new Error('Debugger not initialized');
-    }
-
-    try {
-      await this.debugger.sendCommand('DOM.enable');
-      console.log('✓ DOM domain enabled');
-      await this.debugger.sendCommand('Page.enable');
-      console.log('✓ Page domain enabled');
-      await this.debugger.sendCommand('Runtime.enable');
-      console.log('✓ Runtime domain enabled');
-      await this.debugger.sendCommand('Network.enable');
-      console.log('✓ Network domain enabled');
-      await this.debugger.sendCommand('Log.enable');
-      console.log('✓ Log domain enabled');
-      await this.debugger.sendCommand('DOM.getDocument', { depth: -1 });
-      console.log('✓ DOM document loaded');
-
-      await this.debugger.sendCommand('Page.setLifecycleEventsEnabled', { 
-        enabled: true 
-      });
-      await this.injectEventTracker();
-      console.log('✓ Event tracker injected');
-
-    } catch (error) {
-      console.error('Error enabling CDP domains:', error);
-      throw error;
     }
   }
 

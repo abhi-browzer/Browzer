@@ -3,10 +3,10 @@ import Anthropic from '@anthropic-ai/sdk';
 import { ClaudeClient } from './ClaudeClient';
 import { SystemPromptBuilder } from './SystemPromptBuilder';
 import { AutomationPlanParser, ParsedAutomationPlan } from './AutomationPlanParser';
-import { ToolRegistry } from '../automation/ToolRegistry';
-import { BrowserAutomationExecutor } from '../automation/BrowserAutomationExecutor';
+import { ToolRegistry } from '@/main/automation/ToolRegistry';
+import { BrowserAutomationExecutor } from '@/main/automation/BrowserAutomationExecutor';
 import { RecordingSession } from '@/shared/types/recording';
-import { RecordingStore } from '../recording';
+import { RecordingStore } from '@/main/recording';
 import { ToolExecutionResult } from '@/shared/types';
 
 /**

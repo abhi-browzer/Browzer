@@ -143,6 +143,10 @@ export class BrowserManager {
     // Setup WebContents event listeners
     this.setupTabEvents(tab);
 
+    this.initializeTabDebugger(tab).catch(err => 
+      console.error('[BrowserManager] Failed to initialize debugger for tab:', tabId, err)
+    );
+
     // Add view to window (hidden initially)
     this.baseWindow.contentView.addChildView(view);
     
@@ -175,6 +179,8 @@ export class BrowserManager {
         console.error('[BrowserManager] Error stopping password automation:', err)
       );
     }
+
+    this.cleanupTabDebugger(tab);
 
     // Clean up
     tab.view.webContents.close();
@@ -699,11 +705,60 @@ export class BrowserManager {
    */
   public destroy(): void {
     this.tabs.forEach(tab => {
+      this.cleanupTabDebugger(tab);
       this.baseWindow.contentView.removeChildView(tab.view);
       tab.view.webContents.close();
     });
     this.tabs.clear();
     this.recordingTabs.clear();
+  }
+
+  /**
+   * Initialize centralized debugger for a tab
+   * Attaches debugger and enables all required CDP domains
+   */
+  private async initializeTabDebugger(tab: Tab): Promise<void> {
+    try {
+      const cdpDebugger = tab.view.webContents.debugger;
+      
+      // Attach debugger if not already attached
+      if (!cdpDebugger.isAttached()) {
+        cdpDebugger.attach('1.3');
+        console.log(`✅ [Debugger] Attached to tab: ${tab.id}`);
+      }
+      
+      // Enable all required CDP domains for all services
+      await Promise.all([
+        cdpDebugger.sendCommand('DOM.enable'),
+        cdpDebugger.sendCommand('Page.enable'),
+        cdpDebugger.sendCommand('Runtime.enable'),
+        cdpDebugger.sendCommand('Network.enable'),
+        cdpDebugger.sendCommand('Console.enable'),
+        cdpDebugger.sendCommand('Log.enable'),
+      ]);
+      
+      // Get initial document
+      await cdpDebugger.sendCommand('DOM.getDocument', { depth: -1 });
+      
+      console.log(`✅ [Debugger] CDP domains enabled for tab: ${tab.id}`);
+      
+    } catch (error) {
+      console.error(`[Debugger] Failed to initialize for tab ${tab.id}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Cleanup debugger for a tab
+   * Detaches debugger when tab is closed
+   */
+  private cleanupTabDebugger(tab: Tab): void {
+    const cdpDebugger = tab.view.webContents.debugger;
+    
+    if (cdpDebugger.isAttached()) {
+      cdpDebugger.detach();
+      console.log(`✅ [Debugger] Detached from tab: ${tab.id}`);
+    }
   }
 
   /**
