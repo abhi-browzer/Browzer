@@ -21,6 +21,7 @@ export interface ParsedAutomationPlan {
   hasToolCalls: boolean;
   planType?: 'intermediate' | 'final'; // Whether this is a partial plan or final plan
   reasoning?: string; // Why this is intermediate/final
+  metadataToolUseId?: string; // Tool use ID for declare_plan_metadata (needed for tool_result)
 }
 
 /**
@@ -42,35 +43,44 @@ export class AutomationPlanParser {
     const steps: ParsedAutomationStep[] = [];
     let analysis = '';
     let stepOrder = 0;
-
+    let planMetadata: { planType?: 'intermediate' | 'final'; reasoning?: string; expectedNextSteps?: string } | null = null;
+    let metadataToolUseId: string | undefined = undefined;
 
     // Iterate through content blocks
     for (const block of response.content) {
       if (block.type === 'text') {
-        // Text blocks contain Claude's analysis/explanation
         analysis += block.text + '\n';
-        // console.log(`   [Text] ${block.text}`);
       } else if (block.type === 'tool_use') {
-        // Tool use blocks are the actual automation steps
-        steps.push({
-          toolName: block.name,
-          toolUseId: block.id,
-          input: block.input,
-          order: stepOrder++
-        });
-        // console.log(`   [Tool ${stepOrder}] ${block.name}`);
+        // Check if this is the metadata tool
+        if (block.name === 'declare_plan_metadata') {
+          planMetadata = block.input as any;
+          metadataToolUseId = block.id; // Store the tool_use_id for tool_result
+          console.log(`\u2705 [PlanParser] Model declared plan type: ${planMetadata?.planType}`);
+          console.log(`   Reasoning: ${planMetadata?.reasoning}`);
+          if (planMetadata?.expectedNextSteps) {
+            console.log(`   Expected next: ${planMetadata.expectedNextSteps}`);
+          }
+        } else {
+          // Regular automation tool
+          steps.push({
+            toolName: block.name,
+            toolUseId: block.id,
+            input: block.input,
+            order: stepOrder++
+          });
+        }
       }
     }
 
-    // Detect plan type from analysis text
-    const planType = this.detectPlanType(analysis, steps);
-    const reasoning = this.extractPlanReasoning(analysis);
-
-    // console.log(`✅ [AutomationPlanParser] Parsed ${steps.length} automation steps`);
-    // console.log(`   Plan type: ${planType}`);
-    // if (reasoning) {
-    //   console.log(`   Reasoning: ${reasoning}`);
-    // }
+    // Extract plan type from metadata tool call (robust)
+    // Fallback to detection if metadata tool wasn't called (backward compatibility)
+    const planType = planMetadata?.planType || this.detectPlanType(analysis, steps);
+    const reasoning = planMetadata?.reasoning || this.extractPlanReasoning(analysis);
+    
+    if (!planMetadata) {
+      console.warn(`\u26a0\ufe0f  [PlanParser] Model did not call declare_plan_metadata tool - using fallback detection`);
+      console.log(`   Detected plan type: ${planType}`);
+    }
 
     return {
       steps,
@@ -78,7 +88,8 @@ export class AutomationPlanParser {
       totalSteps: steps.length,
       hasToolCalls: steps.length > 0,
       planType,
-      reasoning
+      reasoning,
+      metadataToolUseId // Include the tool_use_id for tool_result
     };
   }
 

@@ -148,15 +148,24 @@ When a recorded session is provided (in XML format), use it INTELLIGENTLY:
 
 **COMMON PATTERNS:**
 - Navigate → Wait → Type → Wait → Click (use simple "wait" tool for reliability)
-- Prefer "wait" tool over "waitForElement" when selectors might not exist
-- Elements are automatically scrolled into view before clicking
 - Use "wait" after typing to let page validate/enable buttons
 </tool_usage_guidelines>
 
 <multi_phase_automation>
-**IMPORTANT: You can create INTERMEDIATE or FINAL plans, but always PREFER to create final plan untill it becomes mandatory to get the context of DOM at any step(dyanic data).:**
+**⚠️ CRITICAL: ANALYSIS TOOL TOKEN LIMITS**
+Analysis tools (extract_context, take_snapshot) consume significant tokens:
+- Each take_snapshot: ~2,600 tokens
+- Each extract_context: 1,000-5,000 tokens depending on page size
+- Context window limit: 200,000 tokens total
 
-**INTERMEDIATE PLAN** - Use when you need to analyze dynamic content mid-execution:
+**STRICT RULES FOR ANALYSIS TOOLS:**
+1. Use ONLY ONE analysis tool per intermediate plan
+2. Use 2 analysis tools ONLY if both DOM + visual are absolutely critical
+3. NEVER call extract_context multiple times in one plan
+
+**INTERMEDIATE PLAN** - Use when you need to analyze before continuing:
+- You need to see dynamic content (e.g., "click the first repository")
+- You need to verify current state before next action
 - Execute some automation steps
 - Use extract_context or take_snapshot to analyze current state
 - Then wait for system to return results
@@ -166,7 +175,7 @@ Example scenarios for intermediate plans:
 - "Click the first repository" - You need to see what repositories exist
 - "Navigate to the last page" - You need to see pagination state
 - "Fill dynamic form fields" - You need to see what fields appeared
-- "Click on user-specific elements" - You need to see current page content
+- "Verify modal opened" - You need to see visual state
 
 **FINAL PLAN** - Use when you can complete the entire task:
 - All steps are known and deterministic
@@ -174,7 +183,7 @@ Example scenarios for intermediate plans:
 - System will execute all steps and exit on success
 
 **How to indicate plan type:**
-- For INTERMEDIATE: End your plan with extract_context or take_snapshot tool
+- For INTERMEDIATE: End your plan with extract_context or take_snapshot
 - For FINAL: Don't use analysis tools at the end, just complete the automation
 - System automatically detects plan type based on your tool usage
 
@@ -190,29 +199,39 @@ Example scenarios for intermediate plans:
 </multi_phase_automation>
 
 <output_format>
-Your response should contain:
+Your response should contain TWO parts:
 
-1. **Brief optimization analysis** (2-3 sentences):
-   - What is the user's goal?
-   - What is the SHORTEST & MOST OPTIMIZED path to achieve it?
-   - Is this an intermediate or final plan? Why?
+1. **Brief analysis** (1-2 sentences):
+   - Explain your optimization approach
+   - State whether this is a FINAL or INTERMEDIATE plan
+   - Mention any key decisions
 
 2. **Tool calls** (the optimized automation plan):
+   - **CRITICAL: ALWAYS call declare_plan_metadata tool FIRST** to explicitly declare plan type
    - Use the available tools to implement the SHORTEST workflow
    - Include ONLY essential steps
    - Provide proper selectors with backups
    - Add wait times only where necessary
-   - End with extract_context/take_snapshot if this is an intermediate plan
+   - **ANALYSIS TOOL USAGE RULES:**
+     * Prefer to use ONLY ONE analysis tool per intermediate plan (extract_context OR take_snapshot), as it consumes significant tokens (1K - 10K tokens)
+     * Maximum 2 analysis tools only in critical cases
+     * Place analysis tool as the LAST step in the plan
 
 **EXAMPLE STRUCTURE (FINAL):**
 "The user wants to create a GitHub repository named 'my-project'. Instead of following the 15-step recorded workflow, I've optimized this to 4 essential steps: navigate directly to github.com/new, fill the repository name, and submit. This is a FINAL plan since all steps are deterministic."
 
-[Then immediately provide ALL tool calls for the optimized workflow]
+[Tool call 1: declare_plan_metadata with planType="final" and reasoning]
+[Tool call 2-5: The actual automation steps]
 
 **EXAMPLE STRUCTURE (INTERMEDIATE):**
-"The user wants to click the first link, but I need to see what links exist on the current page. This can be an INTERMEDIATE plan - I'll navigate to the page and extract context to see available links."
+"The user wants to click the first link, but I need to see what links exist on the current page. This is an INTERMEDIATE plan - I'll navigate to the page and extract context to see available links. Using only ONE analysis tool to stay within token limits."
 
-[Tool calls for navigation + extract_context at the end]
+[Tool call 1: declare_plan_metadata with planType="intermediate" and reasoning]
+[Tool call 2: navigate]
+[Tool call 3: wait (2000ms)]
+[Tool call 4: extract_context
+
+**REMEMBER: You can make MULTIPLE tool calls in parallel. Always include declare_plan_metadata alongside your automation tools.**
 </output_format>
 
 <quality_standards>
@@ -291,6 +310,7 @@ When you receive an error report, follow this process:
 - DO NOT guess - extract context and analyze
 
 **Generate a COMPLETE new plan**:
+- **ALWAYS call declare_plan_metadata tool FIRST** to declare plan type
 - Start from where the automation currently is (current URL/state)
 - Include ALL remaining steps needed to achieve the goal
 - Do NOT include steps that already succeeded

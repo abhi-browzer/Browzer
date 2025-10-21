@@ -42,6 +42,7 @@ export class ClaudeClient {
     cachedContext?: string; // Recorded session JSON
   }): Promise<Anthropic.Message> {
     const { systemPrompt, userPrompt, tools, cachedContext } = params;
+    console.log(`✅ [ClaudeClient] tools: ${tools}`);
 
     // Build system prompt with optional cached context
     // system can be: string | Array<TextBlockParam>
@@ -104,7 +105,7 @@ export class ClaudeClient {
     cachedContext?: string; // Recorded session (cached)
   }): Promise<Anthropic.Message> {
     const { systemPrompt, messages, tools, cachedContext } = params;
-
+    console.log(`✅ [ClaudeClient] tools: ${tools}`);
     // Build system prompt with caching
     const systemBlocks: Array<Anthropic.Messages.TextBlockParam> = [];
 

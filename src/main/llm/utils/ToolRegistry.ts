@@ -12,6 +12,56 @@ import Anthropic from '@anthropic-ai/sdk';
 
 export const BROWSER_AUTOMATION_TOOLS: Anthropic.Tool[] = [
   {
+    name: 'declare_plan_metadata',
+    description: `REQUIRED: Declare metadata about the automation plan you're creating.
+
+**YOU MUST ALWAYS CALL THIS TOOL** alongside your automation tools to explicitly declare:
+1. Whether this is an INTERMEDIATE or FINAL plan
+2. Your reasoning for the plan type
+
+**PLAN TYPES:**
+
+**INTERMEDIATE PLAN:**
+- Use when you need to analyze results before continuing
+- Use when plan ends with extract_context or take_snapshot
+- Use when you need to make decisions based on current state
+- Use when testing/verifying tools (as requested by user)
+- System will execute the plan, return results, and ask for next plan
+
+**FINAL PLAN:**
+- Use when this plan completes the entire user goal
+- Use when no further analysis or steps are needed
+- System will execute and mark automation as complete
+
+**EXAMPLES:**
+- User: "Test extract_context tool" → INTERMEDIATE (testing, need to see results)
+- User: "Login to GitHub" → FINAL (complete task in one plan)
+- User: "Navigate and analyze the page" → INTERMEDIATE (need analysis results)
+- User: "Fill form and submit" → FINAL (completes the goal)
+
+**CRITICAL: Call this tool in PARALLEL with your automation tools.**
+Claude can make multiple tool calls in one response - use this capability!`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        planType: {
+          type: 'string',
+          enum: ['intermediate', 'final'],
+          description: 'Type of plan: "intermediate" if you need to analyze results before continuing, "final" if this completes the entire goal'
+        },
+        reasoning: {
+          type: 'string',
+          description: 'Brief explanation (1-2 sentences) of why you chose this plan type. Example: "This is intermediate because I need to analyze the extracted context before deciding next steps."'
+        },
+        expectedNextSteps: {
+          type: 'string',
+          description: 'Only for intermediate plans: What you expect to do after analyzing results. Example: "After seeing the form fields, I will fill them appropriately."'
+        }
+      },
+      required: ['planType', 'reasoning']
+    }
+  },
+  {
     name: 'navigate',
     description: 'Navigate to a specific URL. Waits for page to finish loading. Always use complete URLs with https://.',
     input_schema: {
@@ -404,6 +454,12 @@ Letters: a, b, c (lowercase) or with Shift modifier for uppercase`
 
 **CRITICAL: This is NOT an automation tool - it's an ANALYSIS tool.**
 
+**⚠️ USAGE LIMITS (IMPORTANT):**
+- Use ONLY ONE analysis tool per intermediate plan (extract_context OR take_snapshot)
+- Maximum 2 analysis tools only in critical cases where both DOM + visual are essential
+- ALWAYS place as the LAST step in your plan
+- Each call adds significant tokens to context - use sparingly
+
 **🎯 TWO EXTRACTION MODES:**
 
 1. **VIEWPORT MODE (default, full=false)** - Token efficient, extracts only visible elements
@@ -504,6 +560,10 @@ Examples:
   {
     name: 'take_snapshot',
     description: `Capture a VISUAL SCREENSHOT of the viewport for visual analysis.
+
+**⚠️ USAGE LIMITS (IMPORTANT):**
+- Use ONLY ONE analysis tool per intermediate plan (extract_context OR take_snapshot)
+- Each snapshot is ~2,600 tokens - use sparingly to avoid context limits
 
 **🎯 WHEN TO USE THIS TOOL:**
 - When you need to SEE what the page looks like visually

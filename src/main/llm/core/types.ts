@@ -16,7 +16,7 @@ import { ToolExecutionResult } from '@/shared/types';
 export interface AutomationState {
   // User context
   userGoal: string;
-  recordedSession?: RecordingSession;
+  recordedSession: RecordingSession;
   cachedContext?: string; // Formatted recorded session for caching
   
   // Conversation history
@@ -105,4 +105,25 @@ export interface ErrorRecoveryContext {
  */
 export interface IntermediatePlanContext {
   state: AutomationState;
+}
+
+
+/**
+ * Result of iterative automation execution
+ */
+export interface IterativeAutomationResult {
+  success: boolean;
+  plan?: ParsedAutomationPlan;
+  executionResults: any[];
+  error?: string;
+  analysis?: string;
+  usage: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheCreationTokens: number;
+    cacheReadTokens: number;
+    totalCost: number;
+  };
+  recoveryAttempts: number;
+  totalStepsExecuted: number;
 }
