@@ -40,6 +40,7 @@ export function AgentChatArea({
 
   // Show event stream in existing_session mode
   if (viewMode === 'existing_session' && currentSession) {
+    console.log("currenstSession: ", currentSession)
     return (
       <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
         <div className="py-4 space-y-3 max-w-4xl mx-auto">

@@ -36,6 +36,20 @@ export function StepEvent({ event, isLatest }: EventItemProps) {
     return '';
   };
 
+  // Format tool input parameters for display
+  const formatToolInput = (input: any) => {
+    if (!input) return null;
+    
+    // Extract key parameters to show
+    const keyParams: Record<string, any> = {};
+    if (input.selector) keyParams.selector = input.selector;
+    if (input.text) keyParams.text = input.text;
+    if (input.url) keyParams.url = input.url;
+    if (input.value) keyParams.value = input.value;
+    
+    return Object.keys(keyParams).length > 0 ? keyParams : input;
+  };
+
   return (
     <Card className={cn(
       "p-4 border-l-4",
@@ -50,7 +64,8 @@ export function StepEvent({ event, isLatest }: EventItemProps) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <p className={cn("text-sm font-medium", getTextColor())}>
-              Step {event.data?.stepNumber}: {event.data?.toolName}
+              {event.data?.stepNumber && `Step ${event.data.stepNumber}: `}
+              {event.data?.toolName}
             </p>
             {event.data && event.data.status && (
               <Badge
@@ -66,14 +81,36 @@ export function StepEvent({ event, isLatest }: EventItemProps) {
             )}
           </div>
 
+          {/* Tool Input Parameters (for step_start) */}
+          {isRunning && event.data?.input && (
+            <div className="mt-2 space-y-1">
+              {Object.entries(formatToolInput(event.data.input) || {}).map(([key, value]) => (
+                <div key={key} className="text-xs">
+                  <span className="font-medium text-muted-foreground">{key}:</span>{' '}
+                  <span className="text-foreground">
+                    {typeof value === 'string' ? value : JSON.stringify(value)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
           {event.data && event.data?.reasoning && (
             <p className="text-sm text-muted-foreground mb-2">
               {event.data.reasoning}
             </p>
           )}
 
+          {/* Success Summary (for step_complete) */}
+          {isSuccess && event.data?.result?.summary && (
+            <p className="text-sm text-green-700 dark:text-green-300 mt-2">
+              ✓ {event.data.result.summary}
+            </p>
+          )}
+
+          {/* Error Display (for step_error) */}
           {event.data && event.data?.error && (
-            <div className="mt-2 p-2 bg-red-100 dark:bg-red-900/30 rounded text-sm text-red-700 dark:text-red-300">
+            <div className="mt-2 p-3 bg-red-100 dark:bg-red-900/30 rounded text-sm text-red-700 dark:text-red-300">
               <p className="font-medium mb-1">Error:</p>
               <p className="text-xs">
                 {typeof event.data.error === 'string' 
@@ -86,11 +123,14 @@ export function StepEvent({ event, isLatest }: EventItemProps) {
             </div>
           )}
 
-          {event.data && event.data?.result && (
-            <div className="mt-2 text-xs text-muted-foreground">
+          {/* Result Details (collapsible) */}
+          {event.data && event.data?.result && !event.data.result.summary && (
+            <div className="mt-2 text-xs">
               <details className="cursor-pointer">
-                <summary className="font-medium">Result Details</summary>
-                <pre className="mt-2 p-2 bg-muted rounded overflow-x-auto">
+                <summary className="font-medium text-muted-foreground hover:text-foreground">
+                  View Details
+                </summary>
+                <pre className="mt-2 p-2 bg-muted/50 rounded overflow-x-auto text-xs">
                   {JSON.stringify(event.data.result, null, 2)}
                 </pre>
               </details>

@@ -113,19 +113,86 @@ export class AutomationManager {
         return null;
       }
       
+      // Parse messages into individual events
+      const events: any[] = [];
+      
+      for (const msg of sessionData.messages) {
+        const content = Array.isArray(msg.content) ? msg.content : [msg.content];
+        
+        if (msg.role === 'assistant') {
+          // Assistant messages contain text blocks and tool_use blocks
+          for (const block of content) {
+            if (typeof block === 'object' && block !== null) {
+              if (block.type === 'text') {
+                // Claude's thinking/response
+                events.push({
+                  id: `msg_${msg.id}_text`,
+                  sessionId: sessionData.session.id,
+                  type: 'claude_response',
+                  data: { message: block.text },
+                  timestamp: msg.createdAt
+                });
+              } else if (block.type === 'tool_use') {
+                // Tool call (step start)
+                events.push({
+                  id: `msg_${msg.id}_tool_${block.id}`,
+                  sessionId: sessionData.session.id,
+                  type: 'step_start',
+                  data: {
+                    toolName: block.name,
+                    toolUseId: block.id,
+                    input: block.input,
+                    stepNumber: events.filter(e => e.type.startsWith('step_')).length + 1
+                  },
+                  timestamp: msg.createdAt
+                });
+              }
+            }
+          }
+        } else if (msg.role === 'user') {
+          // User messages contain tool_result blocks
+          for (const block of content) {
+            if (typeof block === 'object' && block !== null && block.type === 'tool_result') {
+              // Tool result (step complete or error)
+              const isError = block.is_error || false;
+              const resultContent = Array.isArray(block.content) ? block.content[0] : block.content;
+              const resultText = typeof resultContent === 'object' && resultContent.type === 'text' 
+                ? resultContent.text 
+                : typeof resultContent === 'string' ? resultContent : JSON.stringify(resultContent);
+              
+              // Try to parse result as JSON to extract structured data
+              let parsedResult: any = null;
+              try {
+                parsedResult = JSON.parse(resultText);
+              } catch {
+                parsedResult = { message: resultText };
+              }
+              
+              events.push({
+                id: `msg_${msg.id}_result_${block.tool_use_id}`,
+                sessionId: sessionData.session.id,
+                type: isError ? 'step_error' : 'step_complete',
+                data: {
+                  toolUseId: block.tool_use_id,
+                  result: parsedResult,
+                  success: !isError,
+                  error: isError ? parsedResult : undefined,
+                  stepNumber: events.filter(e => e.type.startsWith('step_')).length
+                },
+                timestamp: msg.createdAt
+              });
+            }
+          }
+        }
+      }
+      
       // Convert to format expected by renderer
       return {
         sessionId: sessionData.session.id,
         userGoal: sessionData.session.userGoal,
         recordingId: sessionData.session.recordingId,
         status: sessionData.session.status,
-        events: sessionData.messages.map(msg => ({
-          id: `msg_${msg.id}`,
-          sessionId: sessionData.session.id,
-          type: msg.role === 'assistant' ? 'claude_response' : 'user_message',
-          data: { message: JSON.stringify(msg.content) },
-          timestamp: msg.createdAt
-        })),
+        events,
         result: sessionData.session.metadata.finalSuccess,
         error: sessionData.session.metadata.finalError,
         startTime: sessionData.session.createdAt,
