@@ -18,6 +18,7 @@ export default defineConfig({
     sourcemap: true,
     minify: false,
     rollupOptions: {
+      external: ['better-sqlite3'],
       output: {
         // Preserve module structure for better debugging
         manualChunks: undefined,

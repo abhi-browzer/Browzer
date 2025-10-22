@@ -29,11 +29,36 @@ export interface AutomationSession {
 }
 
 /**
+ * Session List Item (for sidebar)
+ */
+export interface SessionListItem {
+  sessionId: string;
+  userGoal: string;
+  recordingId: string;
+  status: 'running' | 'completed' | 'error' | 'paused';
+  createdAt: number;
+  updatedAt: number;
+  messageCount: number;
+  stepCount: number;
+}
+
+/**
+ * View State for AgentView
+ */
+export type ViewState = 'new_session' | 'existing_session';
+
+/**
  * Automation Store State
  */
 interface AutomationStore {
+  // View state
+  viewState: ViewState;
+  
   // Current session
   currentSession: AutomationSession | null;
+  
+  // Session history (last 5 sessions)
+  sessionHistory: SessionListItem[];
   
   // Selected recording for new automation
   selectedRecordingId: string | null;
@@ -41,15 +66,29 @@ interface AutomationStore {
   // User input
   userPrompt: string;
   
-  // Actions
+  // Loading states
+  isLoadingSession: boolean;
+  isLoadingHistory: boolean;
+  
+  // Actions - View State
+  setViewState: (state: ViewState) => void;
+  startNewSession: () => void;
+  
+  // Actions - Recording
   setSelectedRecording: (recordingId: string | null) => void;
   setUserPrompt: (prompt: string) => void;
   
+  // Actions - Session Management
   startAutomation: (userGoal: string, recordingId: string, sessionId: string) => void;
+  loadStoredSession: (sessionId: string) => Promise<void>;
+  loadSessionHistory: () => Promise<void>;
+  
+  // Actions - Events
   addEvent: (sessionId: string, event: AutomationProgressEvent) => void;
   completeAutomation: (sessionId: string, result: any) => void;
   errorAutomation: (sessionId: string, error: string) => void;
   
+  // Actions - Cleanup
   clearSession: () => void;
   resetPrompt: () => void;
 }
@@ -68,9 +107,28 @@ export const useAutomationStore = create<AutomationStore>()(
   persist(
     (set, get) => ({
       // Initial state
+      viewState: 'new_session',
       currentSession: null,
+      sessionHistory: [],
       selectedRecordingId: null,
       userPrompt: '',
+      isLoadingSession: false,
+      isLoadingHistory: false,
+      
+      // Set view state
+      setViewState: (state) => {
+        set({ viewState: state });
+      },
+      
+      // Start new session (reset to new session state)
+      startNewSession: () => {
+        set({
+          viewState: 'new_session',
+          currentSession: null,
+          selectedRecordingId: null,
+          userPrompt: ''
+        });
+      },
       
       // Set selected recording
       setSelectedRecording: (recordingId) => {
@@ -94,9 +152,64 @@ export const useAutomationStore = create<AutomationStore>()(
         };
         
         set({ 
+          viewState: 'existing_session',
           currentSession: newSession,
-          userPrompt: '' // Clear prompt after submission
+          userPrompt: '', // Clear prompt after submission
+          selectedRecordingId: recordingId // Lock recording selection
         });
+      },
+      
+      // Load stored session from database
+      loadStoredSession: async (sessionId) => {
+        set({ isLoadingSession: true });
+        
+        try {
+          // Call IPC to load session from main process
+          const sessionData = await window.browserAPI.loadAutomationSession(sessionId);
+          
+          if (sessionData) {
+            // Convert stored session to AutomationSession format
+            const session: AutomationSession = {
+              sessionId: sessionData.sessionId,
+              userGoal: sessionData.userGoal,
+              recordingId: sessionData.recordingId,
+              status: sessionData.status,
+              events: sessionData.events || [],
+              result: sessionData.result,
+              error: sessionData.error,
+              startTime: sessionData.startTime,
+              endTime: sessionData.endTime
+            };
+            
+            set({
+              viewState: 'existing_session',
+              currentSession: session,
+              selectedRecordingId: sessionData.recordingId,
+              isLoadingSession: false
+            });
+          }
+        } catch (error) {
+          console.error('[AutomationStore] Failed to load session:', error);
+          set({ isLoadingSession: false });
+        }
+      },
+      
+      // Load session history
+      loadSessionHistory: async () => {
+        set({ isLoadingHistory: true });
+        
+        try {
+          // Call IPC to get session list from main process
+          const history = await window.browserAPI.getAutomationSessionHistory(5);
+          
+          set({
+            sessionHistory: history || [],
+            isLoadingHistory: false
+          });
+        } catch (error) {
+          console.error('[AutomationStore] Failed to load history:', error);
+          set({ isLoadingHistory: false });
+        }
       },
       
       // Add progress event to current session
@@ -193,7 +306,11 @@ export const useAutomationStore = create<AutomationStore>()(
       
       // Clear current session
       clearSession: () => {
-        set({ currentSession: null });
+        set({
+          viewState: 'new_session',
+          currentSession: null,
+          selectedRecordingId: null
+        });
       },
       
       // Reset prompt only

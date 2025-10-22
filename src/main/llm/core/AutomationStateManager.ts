@@ -3,37 +3,58 @@ import { AutomationState, ExecutedStep, CompletedPlan } from './types';
 import { ParsedAutomationPlan } from '../parsers/AutomationPlanParser';
 import { RecordingSession } from '@/shared/types/recording';
 import { SystemPromptBuilder } from '../builders/SystemPromptBuilder';
+import { SessionManager } from '../session/SessionManager';
 import Anthropic from '@anthropic-ai/sdk';
 
 /**
- * AutomationStateManager - Manages automation session state
+ * AutomationStateManager - State manager with persistent storage
  * 
- * Responsibilities:
- * - Initialize and maintain automation state
- * - Track executed steps and completed plans
+ * Extends the original AutomationStateManager with:
+ * - Persistent session storage via SessionManager
+ * - Automatic conversation history saving
+ * - Context optimization and caching
+ * - Session resume capability
  * - Manage conversation history
  * - Handle phase transitions
  * - Provide state queries and updates
  * 
- * This module centralizes all state management logic, making it easy to:
- * - Debug state issues
- * - Add new state fields
- * - Implement state persistence
- * - Track automation progress
+ * This manager can work in two modes:
+ * 1. New session: Creates a new session and tracks all state
+ * 2. Resume session: Loads existing session and continues from where it left off
  */
 export class AutomationStateManager {
   private state: AutomationState;
+  private sessionManager: SessionManager;
+  private sessionId: string;
 
   constructor(
     userGoal: string,
     recordedSession: RecordingSession,
-    maxRecoveryAttempts: number
+    maxRecoveryAttempts: number,
+    sessionManager?: SessionManager,
+    existingSessionId?: string
   ) {
-    this.state = this.initializeState(userGoal, recordedSession, maxRecoveryAttempts);
+    this.sessionManager = sessionManager ?? new SessionManager();
+
+    if (existingSessionId) {
+      // Resume existing session
+      this.sessionId = existingSessionId;
+      this.state = this.loadExistingSession(existingSessionId);
+    } else {
+      // Create new session
+      this.state = this.initializeState(userGoal, recordedSession, maxRecoveryAttempts);
+      
+      const session = this.sessionManager.createSession({
+        userGoal,
+        recordingId: recordedSession?.id || 'unknown',
+        cachedContext: this.state.cachedContext
+      });
+      this.sessionId = session.id;
+    }
   }
 
   /**
-   * Initialize automation state
+   * Initialize automation state for new session
    */
   private initializeState(
     userGoal: string,
@@ -57,6 +78,55 @@ export class AutomationStateManager {
   }
 
   /**
+   * Load existing session from storage
+   */
+  private loadExistingSession(sessionId: string): AutomationState {
+    const sessionData = this.sessionManager.loadSession(sessionId);
+    if (!sessionData) {
+      throw new Error(`Session ${sessionId} not found`);
+    }
+
+    const { session, messages, steps } = sessionData;
+
+    // Reconstruct state from stored data
+    const state: AutomationState = {
+      userGoal: session.userGoal,
+      recordedSession: undefined, // Would need to load from RecordingStore
+      cachedContext: sessionData.cache.cachedContext,
+      messages: messages.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      })),
+      executedSteps: steps.map(step => ({
+        stepNumber: step.stepNumber,
+        toolName: step.toolName,
+        success: step.success,
+        result: step.result,
+        error: step.error
+      })),
+      phaseNumber: session.metadata.phaseNumber,
+      completedPlans: [],
+      isInRecovery: session.metadata.isInRecovery,
+      recoveryAttempts: session.metadata.recoveryAttempts,
+      maxRecoveryAttempts: 10, // Default
+      isComplete: session.status === 'completed' || session.status === 'error',
+      finalSuccess: session.metadata.finalSuccess || false,
+      finalError: session.metadata.finalError
+    };
+
+    console.log(`✅ [SessionManager] Loaded session ${sessionId} with ${messages.length} messages and ${steps.length} steps`);
+
+    return state;
+  }
+
+  /**
+   * Get session ID
+   */
+  public getSessionId(): string {
+    return this.sessionId;
+  }
+
+  /**
    * Get current state (read-only)
    */
   public getState(): Readonly<AutomationState> {
@@ -72,16 +142,41 @@ export class AutomationStateManager {
 
   /**
    * Add message to conversation history
+   * Automatically persists to database if enabled
    */
   public addMessage(message: Anthropic.MessageParam): void {
     this.state.messages.push(message);
+
+    this.sessionManager.addMessage({
+        sessionId: this.sessionId,
+        role: message.role,
+        content: message.content
+      });
   }
 
   /**
    * Add executed step
+   * Automatically persists to database if enabled
    */
   public addExecutedStep(step: ExecutedStep): void {
     this.state.executedSteps.push(step);
+
+    this.sessionManager.addStep({
+      sessionId: this.sessionId,
+      stepNumber: step.stepNumber,
+      toolName: step.toolName,
+      input: step.result?.effects, // Store effects as input context
+      result: step.result,
+      success: step.success,
+      error: step.error
+    });
+
+    // Update step count in metadata
+    this.sessionManager.updateSession(this.sessionId, {
+      metadata: {
+        totalStepsExecuted: this.state.executedSteps.length
+      }
+    });
   }
 
   /**
@@ -90,6 +185,13 @@ export class AutomationStateManager {
   public enterRecoveryMode(): void {
     this.state.isInRecovery = true;
     this.state.recoveryAttempts++;
+
+    this.sessionManager.updateSession(this.sessionId, {
+      metadata: {
+        isInRecovery: true,
+        recoveryAttempts: this.state.recoveryAttempts
+      }
+    });
   }
 
   /**
@@ -97,6 +199,12 @@ export class AutomationStateManager {
    */
   public exitRecoveryMode(): void {
     this.state.isInRecovery = false;
+
+    this.sessionManager.updateSession(this.sessionId, {
+      metadata: {
+        isInRecovery: false
+      }
+    });
   }
 
   /**
@@ -110,6 +218,12 @@ export class AutomationStateManager {
         stepsExecuted: this.state.currentPlan.totalSteps
       });
       this.state.phaseNumber++;
+
+      this.sessionManager.updateSession(this.sessionId, {
+        metadata: {
+          phaseNumber: this.state.phaseNumber
+        }
+      });
     }
   }
 
@@ -120,6 +234,15 @@ export class AutomationStateManager {
     this.state.isComplete = true;
     this.state.finalSuccess = success;
     this.state.finalError = error;
+
+    this.sessionManager.completeSession(this.sessionId, success, error);
+  }
+
+  /**
+   * Pause session for later resume
+   */
+  public pauseSession(): void {
+    this.sessionManager.pauseSession(this.sessionId);
   }
 
   /**
@@ -131,9 +254,10 @@ export class AutomationStateManager {
 
   /**
    * Get conversation messages
+   * Returns optimized messages with cache control if session manager is available
    */
   public getMessages(): Anthropic.MessageParam[] {
-    return this.state.messages;
+    return this.sessionManager.getMessagesForAPI(this.sessionId);
   }
 
   /**
@@ -214,5 +338,32 @@ export class AutomationStateManager {
    */
   public getLastCompletedPlan(): CompletedPlan | undefined {
     return this.state.completedPlans[this.state.completedPlans.length - 1];
+  }
+
+  /**
+   * Update usage statistics
+   */
+  public updateUsageStats(usage: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheCreationTokens?: number;
+    cacheReadTokens?: number;
+    cost: number;
+  }): void {
+    this.sessionManager.updateUsageStats(this.sessionId, usage);
+  }
+
+  /**
+   * Get context statistics
+   */
+  public getContextStats() {
+    return this.sessionManager.getContextStats(this.sessionId);
+  }
+
+  /**
+   * Get session manager instance
+   */
+  public getSessionManager(): SessionManager | undefined {
+    return this.sessionManager;
   }
 }

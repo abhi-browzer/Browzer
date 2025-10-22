@@ -359,6 +359,19 @@ export class IPCHandlers {
     ipcMain.handle('automation:execute-llm', async (_, userGoal: string, recordedSessionId: string) => {
      return await this.browserManager.executeIterativeAutomation(userGoal, recordedSessionId);
     });
+    
+    // Session management handlers
+    ipcMain.handle('automation:load-session', async (_, sessionId: string) => {
+      return await this.browserManager.loadAutomationSession(sessionId);
+    });
+    
+    ipcMain.handle('automation:get-session-history', async (_, limit?: number) => {
+      return await this.browserManager.getAutomationSessionHistory(limit);
+    });
+    
+    ipcMain.handle('automation:delete-session', async (_, sessionId: string) => {
+      return await this.browserManager.deleteAutomationSession(sessionId);
+    });
   }
 
   public cleanup(): void {

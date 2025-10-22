@@ -6,6 +6,7 @@ import { ClaudeClient } from './clients/ClaudeClient';
 import { ToolRegistry } from './utils/ToolRegistry';
 import { UsageTracker } from './utils/UsageTracker';
 import { AutomationStateManager } from './core/AutomationStateManager';
+import { SessionManager } from './session/SessionManager';
 import { PlanExecutor } from './core/PlanExecutor';
 import { ErrorRecoveryHandler } from './core/ErrorRecoveryHandler';
 import { IntermediatePlanHandler } from './core/IntermediatePlanHandler';
@@ -46,22 +47,32 @@ export class AutomationService extends EventEmitter {
   private toolRegistry: ToolRegistry;
   
   // State and execution managers (initialized per session)
-  private stateManager?: AutomationStateManager;
-  private planExecutor?: PlanExecutor;
-  private errorRecoveryHandler?: ErrorRecoveryHandler;
-  private intermediatePlanHandler?: IntermediatePlanHandler;
-  private usageTracker?: UsageTracker;
+  private stateManager: AutomationStateManager;
+  private sessionManager: SessionManager;
+  private planExecutor: PlanExecutor;
+  private errorRecoveryHandler: ErrorRecoveryHandler;
+  private intermediatePlanHandler: IntermediatePlanHandler;
+  private usageTracker: UsageTracker;
 
   constructor(
     executor: BrowserAutomationExecutor,
     recordingStore: RecordingStore,
-    apiKey?: string
+    apiKey?: string,
+    sessionManager?: SessionManager
   ) {
     super(); // Initialize EventEmitter
     this.executor = executor;
     this.recordingStore = recordingStore;
     this.claudeClient = new ClaudeClient(apiKey);
     this.toolRegistry = new ToolRegistry();
+    this.sessionManager = sessionManager || new SessionManager();
+  }
+
+  /**
+   * Get current session ID
+   */
+  public getSessionId(): string | null {
+    return this.stateManager?.getSessionId() || null;
   }
 
   /**
@@ -90,9 +101,14 @@ export class AutomationService extends EventEmitter {
     recordedSessionId: string,
     maxRecoveryAttempts = 7
   ): Promise<IterativeAutomationResult> {
-    // Initialize session-specific managers
+    // Initialize session-specific managers with persistent storage
     const recordedSession = this.recordingStore.getRecording(recordedSessionId);
-    this.stateManager = new AutomationStateManager(userGoal, recordedSession, maxRecoveryAttempts);
+    this.stateManager = new AutomationStateManager(
+      userGoal,
+      recordedSession,
+      maxRecoveryAttempts,
+      this.sessionManager
+    );
     this.planExecutor = new PlanExecutor(this.executor, this.stateManager, this); // Pass event emitter
     this.errorRecoveryHandler = new ErrorRecoveryHandler(
       this.claudeClient,

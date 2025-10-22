@@ -92,6 +92,11 @@ export interface BrowserAPI {
     sessionId: string;
     message: string;
   }>;
+  
+  // Session Management
+  loadAutomationSession: (sessionId: string) => Promise<any>;
+  getAutomationSessionHistory: (limit?: number) => Promise<any[]>;
+  deleteAutomationSession: (sessionId: string) => Promise<boolean>;
 
   // Event listeners
   onTabsUpdated: (callback: (data: { tabs: TabInfo[]; activeTabId: string | null }) => void) => () => void;
@@ -252,6 +257,14 @@ const browserAPI: BrowserAPI = {
   // LLM Automation API
   executeLLMAutomation: (userGoal: string, recordedSessionId: string) =>
     ipcRenderer.invoke('automation:execute-llm', userGoal, recordedSessionId),
+  
+  // Session Management API
+  loadAutomationSession: (sessionId: string) =>
+    ipcRenderer.invoke('automation:load-session', sessionId),
+  getAutomationSessionHistory: (limit?: number) =>
+    ipcRenderer.invoke('automation:get-session-history', limit),
+  deleteAutomationSession: (sessionId: string) =>
+    ipcRenderer.invoke('automation:delete-session', sessionId),
   
   // Automation event listeners
   onAutomationProgress: (callback) => {

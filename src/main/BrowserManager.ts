@@ -512,7 +512,7 @@ export class BrowserManager {
    * 
    * @param userGoal - What the user wants to automate
    * @param recordedSessionId - ID of recorded session to use as reference
-   * @returns Session info for tracking
+   * @returns Session info for tracking with persistent session ID
    */
   public async executeIterativeAutomation(
     userGoal: string,
@@ -525,16 +525,30 @@ export class BrowserManager {
 
     const tab = this.tabs.get(this.activeTabId);
 
-    const sessionId = `automation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
+    // Create AutomationService with SessionManager
     const llmService = new AutomationService(
       tab.automationExecutor,
       this.recordingStore,
       process.env.ANTHROPIC_API_KEY
     );
 
+    // Start automation execution (non-blocking)
+    // This will create a persistent session in the database
+    const automationPromise = llmService.executeAutomation(userGoal, recordedSessionId, 20);
+
+    // Get the persistent session ID from the service
+    // Wait a moment for the session to be created
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const sessionId = llmService.getSessionId();
+
+    if (!sessionId) {
+      throw new Error('Failed to create automation session');
+    }
+
+    // Store service with persistent session ID
     this.automationSessions.set(sessionId, llmService);
 
+    // Set up progress event forwarding
     llmService.on('progress', (event) => {
       if (this.agentUIView && !this.agentUIView.webContents.isDestroyed()) {
         this.agentUIView.webContents.send('automation:progress', {
@@ -544,7 +558,8 @@ export class BrowserManager {
       }
     });
 
-    llmService.executeAutomation(userGoal, recordedSessionId, 20)
+    // Handle automation completion/error (non-blocking)
+    automationPromise
       .then(result => {
         if (this.agentUIView && !this.agentUIView.webContents.isDestroyed()) {
           this.agentUIView.webContents.send('automation:complete', {
@@ -586,6 +601,88 @@ export class BrowserManager {
     }
     
     return success;
+  }
+
+  /**
+   * Load automation session from database
+   */
+  public async loadAutomationSession(sessionId: string): Promise<any> {
+    try {
+      // Get the automation service's session manager
+      // For now, create a temporary session manager to load the session
+      const { SessionManager } = await import('./llm/session/SessionManager');
+      const sessionManager = new SessionManager();
+      
+      const sessionData = sessionManager.loadSession(sessionId);
+      
+      if (!sessionData) {
+        return null;
+      }
+      
+      // Convert to format expected by renderer
+      return {
+        sessionId: sessionData.session.id,
+        userGoal: sessionData.session.userGoal,
+        recordingId: sessionData.session.recordingId,
+        status: sessionData.session.status,
+        events: sessionData.messages.map(msg => ({
+          id: `msg_${msg.id}`,
+          sessionId: sessionData.session.id,
+          type: msg.role === 'assistant' ? 'claude_response' : 'user_message',
+          data: { message: JSON.stringify(msg.content) },
+          timestamp: msg.createdAt
+        })),
+        result: sessionData.session.metadata.finalSuccess,
+        error: sessionData.session.metadata.finalError,
+        startTime: sessionData.session.createdAt,
+        endTime: sessionData.session.completedAt
+      };
+    } catch (error) {
+      console.error('[BrowserManager] Failed to load session:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get automation session history
+   */
+  public async getAutomationSessionHistory(limit = 5): Promise<any[]> {
+    try {
+      const { SessionManager } = await import('./llm/session/SessionManager');
+      const sessionManager = new SessionManager();
+      
+      const sessions = sessionManager.listSessions(limit, 0);
+      
+      return sessions.map(session => ({
+        sessionId: session.id,
+        userGoal: session.userGoal,
+        recordingId: session.recordingId,
+        status: session.status,
+        createdAt: session.createdAt,
+        updatedAt: session.updatedAt,
+        messageCount: session.messageCount,
+        stepCount: session.stepCount
+      }));
+    } catch (error) {
+      console.error('[BrowserManager] Failed to load session history:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Delete automation session
+   */
+  public async deleteAutomationSession(sessionId: string): Promise<boolean> {
+    try {
+      const { SessionManager } = await import('./llm/session/SessionManager');
+      const sessionManager = new SessionManager();
+      
+      sessionManager.deleteSession(sessionId);
+      return true;
+    } catch (error) {
+      console.error('[BrowserManager] Failed to delete session:', error);
+      return false;
+    }
   }
 
   /**
