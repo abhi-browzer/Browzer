@@ -52,7 +52,7 @@ export default function AgentView() {
   const isDisabled = currentSession?.status === 'running';
 
   return (
-    <section className="flex flex-col justify-between h-full">
+    <section className="flex flex-col h-full overflow-hidden">
       {/* Header */}
       <AgentHeader
         viewMode={viewState}
@@ -64,6 +64,7 @@ export default function AgentView() {
         isDisabled={isDisabled}
       />
 
+      {/* Chat Area - Takes remaining space and handles overflow */}
       <AgentChatArea
           viewMode={viewState}
           currentSession={currentSession}

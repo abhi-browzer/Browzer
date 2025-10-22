@@ -41,16 +41,14 @@ export function AgentChatArea({
   // Show event stream in existing_session mode
   if (viewMode === 'existing_session' && currentSession) {
     return (
-      <div className="flex-1 overflow-y-auto w-full">
-        <div className="px-6 py-4 space-y-3 max-w-4xl mx-auto">
-          {/* User Goal */}
-          <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 sticky top-0 z-10">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
+        <div className="py-4 space-y-3 max-w-4xl mx-auto">
+          <div className="bg-background/20 border border-background/20 px-4 sticky top-0 z-10 backdrop-blur-md">
             <p className="text-sm font-medium text-primary mb-1">Goal</p>
             <p className="text-sm">{currentSession.userGoal}</p>
           </div>
 
-          {/* Event Stream */}
-          <div className="space-y-2">
+            <div className="space-y-2 px-6">
             {currentSession.events.map((event, index) => (
               <EventItem
                 key={event.id}
@@ -58,9 +56,8 @@ export function AgentChatArea({
                 isLatest={index === currentSession.events.length - 1}
               />
             ))}
-          </div>
 
-          {/* Auto-scroll anchor */}
+          </div>
           <div ref={chatEndRef} className="h-1" />
         </div>
       </div>

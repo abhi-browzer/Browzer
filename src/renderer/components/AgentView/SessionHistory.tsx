@@ -38,7 +38,8 @@ export function SessionHistory({
   }
 
   return (
-   <div className="p-6 space-y-3 overflow-y-auto">
+   <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
+      <div className="p-6 space-y-3">
         <h3 className="text-sm font-semibold text-muted-foreground mb-4">
           Recent Sessions
         </h3>
@@ -86,5 +87,6 @@ export function SessionHistory({
           </Card>
         ))}
       </div>
+    </div>
   );
 }

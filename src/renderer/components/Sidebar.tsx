@@ -34,9 +34,9 @@ export function Sidebar() {
 
   return (
     <ErrorBoundary>
-      <section className="h-full w-full flex flex-col ">
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-        <TabsList className="w-full rounded-none p-0 h-auto">
+      <section className="h-full w-full flex flex-col overflow-hidden">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
+        <TabsList className="w-full rounded-none p-0 h-auto flex-shrink-0">
           <TabsTrigger 
             value="agent" 
           >
@@ -51,11 +51,11 @@ export function Sidebar() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="agent" className='h-full'>
+        <TabsContent value="agent" className='flex-1 overflow-hidden'>
           <AgentView />
         </TabsContent>
 
-        <TabsContent value="recording">
+        <TabsContent value="recording" className='flex-1 overflow-hidden'>
           <RecordingView />
         </TabsContent>
       </Tabs>

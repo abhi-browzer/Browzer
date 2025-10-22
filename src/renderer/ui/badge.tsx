@@ -18,7 +18,7 @@ const badgeVariants = cva(
         outline:
           "text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
         success:
-          "text-teal-600 border-teal-600 bg-teal-100 dark:focus-visible:ring-teal-600/40 dark:bg-teal-50/60",
+          "text-teal-600 border-teal-600 bg-teal-100 dark:focus-visible:ring-teal-600/40 dark:bg-teal-200",
       },
     },
     defaultVariants: {
