@@ -4,7 +4,6 @@
  * Displays automation step execution (start, complete, error)
  */
 
-import React from 'react';
 import { Play, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import { Card } from '@/renderer/ui/card';
 import { Badge } from '@/renderer/ui/badge';
@@ -51,9 +50,9 @@ export function StepEvent({ event, isLatest }: EventItemProps) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <p className={cn("text-sm font-medium", getTextColor())}>
-              Step {event.data.stepNumber}: {event.data.toolName}
+              Step {event.data?.stepNumber}: {event.data?.toolName}
             </p>
-            {event.data.status && (
+            {event.data && event.data.status && (
               <Badge
                 variant={
                   event.data.status === 'success' ? 'success' :
@@ -67,20 +66,27 @@ export function StepEvent({ event, isLatest }: EventItemProps) {
             )}
           </div>
 
-          {event.data.reasoning && (
+          {event.data && event.data?.reasoning && (
             <p className="text-sm text-muted-foreground mb-2">
               {event.data.reasoning}
             </p>
           )}
 
-          {event.data.error && (
+          {event.data && event.data?.error && (
             <div className="mt-2 p-2 bg-red-100 dark:bg-red-900/30 rounded text-sm text-red-700 dark:text-red-300">
               <p className="font-medium mb-1">Error:</p>
-              <p className="text-xs">{event.data.error}</p>
+              <p className="text-xs">
+                {typeof event.data.error === 'string' 
+                  ? event.data.error 
+                  : event.data.error?.message || JSON.stringify(event.data.error)}
+              </p>
+              {typeof event.data.error === 'object' && event.data.error?.code && (
+                <p className="text-xs mt-1 opacity-75">Code: {event.data.error.code}</p>
+              )}
             </div>
           )}
 
-          {event.data.result && (
+          {event.data && event.data?.result && (
             <div className="mt-2 text-xs text-muted-foreground">
               <details className="cursor-pointer">
                 <summary className="font-medium">Result Details</summary>

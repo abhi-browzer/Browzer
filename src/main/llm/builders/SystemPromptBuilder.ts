@@ -550,6 +550,7 @@ Remember: The automation has already completed ${executedSteps.filter(s => s.suc
    * - Complete element attributes for reliable selector generation
    * - Parent context for hierarchical understanding
    * - Summarized effects for outcome understanding
+   * - Timestamp and time gap information for realistic wait time guidance
    * - Concise format optimized for prompt caching
    */
   public static formatRecordedSession(session: RecordingSession): string {
@@ -562,12 +563,35 @@ Remember: The automation has already completed ${executedSteps.filter(s => s.suc
   <duration_seconds>${Math.round(session.duration / 1000)}</duration_seconds>
   <total_actions>${session.actionCount}</total_actions>
   <starting_url>${session.url || session.tabs?.[0]?.url || 'Unknown'}</starting_url>
+  <timing_guidance>
+    <important>The timestamps below show REAL USER TIMING. Use these gaps to determine realistic wait times between actions.</important>
+    <guidance>
+      - Small gaps (0-2 sec): User was already focused, minimal wait needed
+      - Medium gaps (2-8 sec): Page was loading or user was reading/deciding, add 2-3 sec wait
+      - Large gaps (8+ sec): Form validation, page transition, or network request, add 3-5 sec wait
+      - After navigation: Always add 2-3 sec minimum for page load
+      - After form submission: Add 3-5 sec for server response
+    </guidance>
+  </timing_guidance>
 </metadata>\n\n`;
     
     formatted += `<actions>\n`;
     
+    let previousTimestamp: number | null = null;
+    
     actions.forEach((action: RecordedAction, index: number) => {
-      formatted += `  <action id="${index + 1}" type="${action.type}">\n`;
+      const currentTimestamp = action.timestamp;
+      const timeSinceLastAction = previousTimestamp ? currentTimestamp - previousTimestamp : 0;
+      const timeSinceLastActionSec = (timeSinceLastAction / 1000).toFixed(1);
+      
+      formatted += `  <action id="${index + 1}" type="${action.type}" timestamp="${currentTimestamp}" time_gap_from_previous_sec="${timeSinceLastActionSec}">\n`;
+      
+      // Timing information
+      formatted += `    <timing>
+      <timestamp_ms>${currentTimestamp}</timestamp_ms>
+      <time_since_previous_action_sec>${timeSinceLastActionSec}</time_since_previous_action_sec>
+      <suggested_wait_before_next_action_ms>${this.calculateSuggestedWait(timeSinceLastAction, action.type)}</suggested_wait_before_next_action_ms>
+    </timing>\n`;
       
       // Current page context
       if (action.tabUrl) {
@@ -672,11 +696,65 @@ Remember: The automation has already completed ${executedSteps.filter(s => s.suc
       }
       
       formatted += `  </action>\n\n`;
+      previousTimestamp = currentTimestamp;
     });
     
     formatted += `</actions>\n</recorded_session>`;
     
     return formatted;
+  }
+
+  /**
+   * Calculate suggested wait time based on the gap between actions
+   * This helps the model understand realistic timing for automation
+   * 
+   * @param timeSinceLastAction - Time gap in milliseconds
+   * @param actionType - Type of action that just occurred
+   * @returns Suggested wait time in milliseconds
+   */
+  private static calculateSuggestedWait(timeSinceLastAction: number, actionType: string): number {
+    // If this is the first action, no wait needed
+    if (timeSinceLastAction === 0) {
+      return 0;
+    }
+
+    const gapSeconds = timeSinceLastAction / 1000;
+
+    // Navigation actions typically need longer waits for page load
+    if (actionType === 'navigate' || actionType === 'tab-switch') {
+      return Math.max(2000, Math.min(gapSeconds * 1000, 5000));
+    }
+
+    // Form submission needs time for server response
+    if (actionType === 'submit') {
+      return Math.max(3000, Math.min(gapSeconds * 1000, 5000));
+    }
+
+    // Click actions followed by large gaps suggest page load or modal
+    if (actionType === 'click') {
+      if (gapSeconds > 8) {
+        return 3000; // Page transition or modal loading
+      } else if (gapSeconds > 4) {
+        return 2000; // Form validation or content loading
+      } else if (gapSeconds > 2) {
+        return 1500; // Minor UI update
+      } else {
+        return 1000; // Quick interaction
+      }
+    }
+
+    // Input actions are typically fast (user typing)
+    if (actionType === 'input') {
+      return Math.min(500, gapSeconds * 500); // Minimal wait for typing
+    }
+
+    // File upload needs time for processing
+    if (actionType === 'file-upload') {
+      return Math.max(2000, Math.min(gapSeconds * 1000, 5000));
+    }
+
+    // Default: use a fraction of the observed gap, capped at reasonable limits
+    return Math.max(1000, Math.min(gapSeconds * 1000, 3000));
   }
 
   /**

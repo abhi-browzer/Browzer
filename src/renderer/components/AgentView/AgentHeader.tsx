@@ -53,18 +53,15 @@ export function AgentHeader({
             </Badge>
           )}
         </div>
-
-        {isExistingSession && (
-          <Button
+        <Button
             variant="ghost"
             size="sm"
             onClick={onNewSession}
-            className="gap-2"
+            className="gap-2 text-xs"
           >
             <Plus className="w-4 h-4" />
             New Session
-          </Button>
-        )}
+        </Button>
       </div>
 
       <Select

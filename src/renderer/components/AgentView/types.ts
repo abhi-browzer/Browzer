@@ -62,6 +62,6 @@ export interface SessionHistoryProps {
  * Props for Event Items
  */
 export interface EventItemProps {
-  event: any; // Will be typed based on event type
+  event: any;
   isLatest?: boolean;
 }
