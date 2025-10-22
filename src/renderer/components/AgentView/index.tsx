@@ -52,7 +52,7 @@ export default function AgentView() {
   const isDisabled = currentSession?.status === 'running';
 
   return (
-    <div className="flex flex-col h-full bg-background overflow-hidden">
+    <section className="flex flex-col h-full">
       {/* Header */}
       <AgentHeader
         viewMode={viewState}
@@ -64,9 +64,7 @@ export default function AgentView() {
         isDisabled={isDisabled}
       />
 
-      {/* Chat Area */}
-      <div className="flex-1 overflow-hidden">
-        <AgentChatArea
+      <AgentChatArea
           viewMode={viewState}
           currentSession={currentSession}
           sessionHistory={sessionHistory}
@@ -74,7 +72,6 @@ export default function AgentView() {
           isLoadingHistory={isLoadingHistory}
           onSessionSelect={handleSessionSelect}
         />
-      </div>
 
       {/* Footer */}
       <AgentFooter
@@ -85,6 +82,6 @@ export default function AgentView() {
         onPromptChange={handlePromptChange}
         onSubmit={handleSubmit}
       />
-    </div>
+    </section>
   );
 }

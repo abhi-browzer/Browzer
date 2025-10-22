@@ -30,31 +30,33 @@ export function AgentFooter({
   const canSubmit = userPrompt.trim() && selectedRecordingId && !isSubmitting && !isDisabled;
 
   return (
-    <div className="flex-shrink-0 border-t bg-card/30 backdrop-blur-sm p-1">
-      <InputGroup>
-        <InputGroupTextarea
-          value={userPrompt}
-          onChange={(e) => onPromptChange(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Describe what you want to automate..."
-          disabled={isDisabled || isSubmitting}
-          rows={3}
-          className="resize-none"
-        />
-        <InputGroupAddon align='inline-end'>
-          <InputGroupButton
-            onClick={onSubmit}
-            disabled={!canSubmit}
-            className="rounded-full w-10 h-10 p-0"
-          >
-            {isSubmitting ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <ArrowUp className="w-5 h-5" />
-            )}
-          </InputGroupButton>
-        </InputGroupAddon>
-      </InputGroup>
-    </div>
+    <section className="p-3 flex-shrink-0">
+       <InputGroup>
+          <InputGroupTextarea
+            placeholder={selectedRecordingId ? "Continue the conversation..." : "Describe what you want to automate..."}
+            value={userPrompt}
+            onChange={(e) => onPromptChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={isDisabled || isSubmitting}
+            rows={3}
+            className="resize-none"
+          />
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton
+              variant="default"
+              className="rounded-full"
+              size="icon-xs"
+              disabled={!canSubmit}
+              onClick={onSubmit}
+            >
+              {isSubmitting ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <ArrowUp className="w-4 h-4" />
+              )}
+            </InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
+    </section>
   );
 }

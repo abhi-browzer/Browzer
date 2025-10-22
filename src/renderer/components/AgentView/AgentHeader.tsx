@@ -32,7 +32,7 @@ export function AgentHeader({
   const isExistingSession = viewMode === 'existing_session';
 
   return (
-    <div className="flex-shrink-0 border-b bg-card/50 backdrop-blur-sm px-6 py-4 z-10">
+    <div className="flex-shrink-0 border-b bg-card/50 backdrop-blur-sm px-4 py-2 z-16 sticky top-0">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <h2 className="text-lg font-semibold">Agent</h2>
