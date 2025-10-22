@@ -7,7 +7,6 @@
 
 import React from 'react';
 import { ClaudeThinkingEvent } from './ClaudeThinkingEvent';
-import { PlanGeneratedEvent } from './PlanGeneratedEvent';
 import { StepEvent } from './StepEvent';
 import { ErrorEvent } from './ErrorEvent';
 import { ClaudeResponseEvent } from './ClaudeResponseEvent';
@@ -22,7 +21,8 @@ export function EventItem({ event, isLatest }: EventItemProps) {
       return <ClaudeResponseEvent event={event} isLatest={isLatest} />;
     
     case 'plan_generated':
-      return <PlanGeneratedEvent event={event} isLatest={isLatest} />;
+      // Don't show plan_generated events in UI (stored in DB only)
+      return null;
     
     case 'step_start':
     case 'step_complete':

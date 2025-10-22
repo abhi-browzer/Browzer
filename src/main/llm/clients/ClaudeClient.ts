@@ -15,11 +15,13 @@ export class ClaudeClient {
   private client: Anthropic;
   private readonly model = 'claude-sonnet-4-5-20250929';
   private readonly maxTokens = 8192; // Enough for comprehensive plans
+  private onThinking?: (message: string) => void;
 
-  constructor(apiKey?: string) {
+  constructor(apiKey?: string, onThinking?: (message: string) => void) {
     this.client = new Anthropic({
       apiKey: apiKey!
     });
+    this.onThinking = onThinking;
   }
 
   /**
@@ -58,6 +60,11 @@ export class ClaudeClient {
     }
 
     try {
+      // Emit thinking event
+      if (this.onThinking) {
+        this.onThinking('Generating automation plan...');
+      }
+
       const response = await this.client.messages.create({
         model: this.model,
         max_tokens: this.maxTokens,
@@ -115,6 +122,11 @@ export class ClaudeClient {
     }
 
     try {
+      // Emit thinking event
+      if (this.onThinking) {
+        this.onThinking('Analyzing and generating next steps...');
+      }
+
       const response = await this.client.messages.create({
         model: this.model,
         max_tokens: this.maxTokens,

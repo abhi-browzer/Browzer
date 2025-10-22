@@ -63,7 +63,12 @@ export class AutomationService extends EventEmitter {
     super(); // Initialize EventEmitter
     this.executor = executor;
     this.recordingStore = recordingStore;
-    this.claudeClient = new ClaudeClient(apiKey);
+    
+    // Pass thinking callback to ClaudeClient
+    this.claudeClient = new ClaudeClient(apiKey, (message: string) => {
+      this.emitProgress('claude_thinking', { message });
+    });
+    
     this.toolRegistry = new ToolRegistry();
     this.sessionManager = sessionManager || new SessionManager();
   }
@@ -123,10 +128,7 @@ export class AutomationService extends EventEmitter {
     this.usageTracker = new UsageTracker();
 
     try {
-      // Emit automation started event
-      this.emitProgress('claude_thinking', { message: 'Generating automation plan...' });
-
-      // Step 1: Generate initial plan
+      // Step 1: Generate initial plan (thinking event emitted by ClaudeClient)
       const initialPlan = await this.generateInitialPlan();
       this.usageTracker.addUsage(initialPlan.usage);
       this.stateManager.setCurrentPlan(initialPlan.plan);
