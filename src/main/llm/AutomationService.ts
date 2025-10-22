@@ -57,8 +57,8 @@ export class AutomationService extends EventEmitter {
   constructor(
     executor: BrowserAutomationExecutor,
     recordingStore: RecordingStore,
+    sessionManager: SessionManager,
     apiKey?: string,
-    sessionManager?: SessionManager
   ) {
     super(); // Initialize EventEmitter
     this.executor = executor;
@@ -70,7 +70,7 @@ export class AutomationService extends EventEmitter {
     });
     
     this.toolRegistry = new ToolRegistry();
-    this.sessionManager = sessionManager || new SessionManager();
+    this.sessionManager = sessionManager;
   }
 
   /**

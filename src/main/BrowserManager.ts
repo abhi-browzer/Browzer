@@ -4,6 +4,7 @@ import { RecordingStore } from '@/main/recording';
 import { HistoryService } from '@/main/history/HistoryService';
 import { PasswordManager } from '@/main/password/PasswordManager';
 import { BrowserAutomationExecutor } from './automation';
+import { SessionManager } from '@/main/llm/session/SessionManager';
 import {
   TabManager,
   RecordingManager,
@@ -33,6 +34,7 @@ export class BrowserManager {
   private historyService: HistoryService;
   private passwordManager: PasswordManager;
   private recordingStore: RecordingStore;
+  private sessionManager: SessionManager;
 
   constructor(
     private baseWindow: BaseWindow,
@@ -43,6 +45,7 @@ export class BrowserManager {
     this.recordingStore = new RecordingStore();
     this.historyService = new HistoryService();
     this.passwordManager = new PasswordManager();
+    this.sessionManager = new SessionManager();
 
     // Initialize managers
     this.navigationManager = new NavigationManager();
@@ -74,6 +77,7 @@ export class BrowserManager {
 
     this.automationManager = new AutomationManager(
       this.recordingStore,
+      this.sessionManager,
       agentUIView
     );
 
@@ -256,6 +260,7 @@ export class BrowserManager {
     this.tabManager.destroy();
     this.recordingManager.destroy();
     this.automationManager.destroy();
+    this.sessionManager.close();
   }
 
   // ============================================================================

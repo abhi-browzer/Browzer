@@ -31,10 +31,10 @@ export class AutomationStateManager {
     userGoal: string,
     recordedSession: RecordingSession,
     maxRecoveryAttempts: number,
-    sessionManager?: SessionManager,
+    sessionManager: SessionManager,
     existingSessionId?: string
   ) {
-    this.sessionManager = sessionManager ?? new SessionManager();
+    this.sessionManager = sessionManager;
 
     if (existingSessionId) {
       // Resume existing session

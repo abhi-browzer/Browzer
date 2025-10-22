@@ -2,6 +2,7 @@ import { WebContentsView } from 'electron';
 import { AutomationService } from '@/main/llm';
 import { RecordingStore } from '@/main/recording';
 import { Tab } from './types';
+import { SessionManager } from '@/main/llm/session/SessionManager';
 
 /**
  * AutomationManager - Manages LLM automation sessions
@@ -14,11 +15,15 @@ import { Tab } from './types';
  */
 export class AutomationManager {
   private automationSessions: Map<string, AutomationService> = new Map();
+  private sessionManager: SessionManager;
 
   constructor(
     private recordingStore: RecordingStore,
+    sessionManager: SessionManager,
     private agentUIView?: WebContentsView
-  ) {}
+  ) {
+    this.sessionManager = sessionManager;
+  }
 
   /**
    * Execute LLM-powered automation on active tab
@@ -36,11 +41,12 @@ export class AutomationManager {
       throw new Error('No active tab or automation executor');
     }
 
-    // Create AutomationService
+    // Create AutomationService with shared SessionManager
     const llmService = new AutomationService(
       activeTab.automationExecutor,
       this.recordingStore,
-      process.env.ANTHROPIC_API_KEY
+      this.sessionManager,
+      process.env.ANTHROPIC_API_KEY,
     );
 
     // Start automation execution (non-blocking)
@@ -49,10 +55,6 @@ export class AutomationManager {
     // Wait for session to be created
     await new Promise(resolve => setTimeout(resolve, 100));
     const sessionId = llmService.getSessionId();
-
-    if (!sessionId) {
-      throw new Error('Failed to create automation session');
-    }
 
     // Store service with persistent session ID
     this.automationSessions.set(sessionId, llmService);
@@ -95,7 +97,7 @@ export class AutomationManager {
     return {
       success: true,
       sessionId,
-      message: 'Automation started successfully'
+      message: 'Automation started successfully 🎉'
     };
   }
 
@@ -104,10 +106,7 @@ export class AutomationManager {
    */
   public async loadAutomationSession(sessionId: string): Promise<any> {
     try {
-      const { SessionManager } = await import('@/main/llm/session/SessionManager');
-      const sessionManager = new SessionManager();
-      
-      const sessionData = sessionManager.loadSession(sessionId);
+      const sessionData = this.sessionManager.loadSession(sessionId);
       
       if (!sessionData) {
         return null;
@@ -209,10 +208,7 @@ export class AutomationManager {
    */
   public async getAutomationSessionHistory(limit = 5): Promise<any[]> {
     try {
-      const { SessionManager } = await import('@/main/llm/session/SessionManager');
-      const sessionManager = new SessionManager();
-      
-      const sessions = sessionManager.listSessions(limit, 0);
+      const sessions = this.sessionManager.listSessions(limit, 0);
       
       return sessions.map(session => ({
         sessionId: session.id,
@@ -235,10 +231,7 @@ export class AutomationManager {
    */
   public async deleteAutomationSession(sessionId: string): Promise<boolean> {
     try {
-      const { SessionManager } = await import('@/main/llm/session/SessionManager');
-      const sessionManager = new SessionManager();
-      
-      sessionManager.deleteSession(sessionId);
+      this.sessionManager.deleteSession(sessionId);
       return true;
     } catch (error) {
       console.error('[AutomationManager] Failed to delete session:', error);
