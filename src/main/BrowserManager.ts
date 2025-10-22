@@ -1,519 +1,196 @@
-import { BaseWindow, WebContentsView, Menu } from 'electron';
-import path from 'node:path';
-import { ActionRecorder, VideoRecorder, RecordingStore } from '@/main/recording';
+import { BaseWindow, WebContentsView } from 'electron';
+import { RecordedAction, TabInfo } from '@/shared/types';
+import { RecordingStore } from '@/main/recording';
 import { HistoryService } from '@/main/history/HistoryService';
 import { PasswordManager } from '@/main/password/PasswordManager';
-import { RecordedAction, RecordingSession, HistoryTransition, RecordingTabInfo, TabInfo } from '@/shared/types';
-import { INTERNAL_PAGES } from '@/main/constants';
-import { stat } from 'fs/promises';
-import { PasswordUtil } from '@/main/utils/PasswordUtil';
-import { PasswordAutomation, BrowserAutomationExecutor } from './automation';
-import { AutomationService } from './llm';
-
-// Internal tab structure (includes WebContentsView)
-interface Tab {
-  id: string;
-  view: WebContentsView;
-  info: TabInfo;
-  videoRecorder?: VideoRecorder;
-  passwordAutomation?: PasswordAutomation;
-  automationExecutor?: BrowserAutomationExecutor;
-  // Track selected credential for multi-step flows
-  selectedCredentialId?: string;
-  selectedCredentialUsername?: string;
-}
+import { BrowserAutomationExecutor } from './automation';
+import {
+  TabManager,
+  RecordingManager,
+  AutomationManager,
+  NavigationManager,
+  DebuggerManager,
+  TabEventHandlers
+} from './browser';
 
 /**
- * BrowserManager - Manages multiple WebContentsView instances for tabs
- * 
- * Each tab is a separate WebContentsView with its own sandboxed browsing context.
- * All tab management is handled in the main process for better control and security.
+ * BrowserManager - Orchestrates browser functionality using modular components
+ * - TabManager: Tab lifecycle and state
+ * - RecordingManager: Recording orchestration
+ * - AutomationManager: LLM automation sessions
+ * - NavigationManager: URL handling
+ * - DebuggerManager: CDP debugger lifecycle
  */
 export class BrowserManager {
-  private tabs: Map<string, Tab> = new Map();
-  private activeTabId: string | null = null;
-  private baseWindow: BaseWindow;
-  private agentUIHeight: number;
-  private tabCounter = 0;
-  private isRecording = false;
-  private agentUIView?: WebContentsView;
-  private recordingStore: RecordingStore;
+  // Modular components
+  private tabManager: TabManager;
+  private recordingManager: RecordingManager;
+  private automationManager: AutomationManager;
+  private navigationManager: NavigationManager;
+  private debuggerManager: DebuggerManager;
+
+  // Services (shared across managers)
   private historyService: HistoryService;
   private passwordManager: PasswordManager;
-  private recordingStartTime = 0;
-  private recordingStartUrl = '';
-  private currentRecordingId: string | null = null;
-  private currentSidebarWidth = 0;
-  
+  private recordingStore: RecordingStore;
 
-   // Centralized recorder for multi-tab recording
-  private centralRecorder: ActionRecorder;
-  private recordingTabs: Map<string, RecordingTabInfo> = new Map();
-  private lastActiveTabId: string | null = null;
-  private activeVideoRecorder: VideoRecorder | null = null;
-
-  private automationSessions: Map<string, AutomationService> = new Map();
-
-  constructor(baseWindow: BaseWindow, chromeHeight: number, agentUIView?: WebContentsView) {
-    this.baseWindow = baseWindow;
-    this.agentUIHeight = chromeHeight;
-    this.agentUIView = agentUIView;
+  constructor(
+    private baseWindow: BaseWindow,
+    agentUIHeight: number,
+    agentUIView?: WebContentsView
+  ) {
+    // Initialize services
     this.recordingStore = new RecordingStore();
     this.historyService = new HistoryService();
     this.passwordManager = new PasswordManager();
-    
-    this.centralRecorder = new ActionRecorder();
-    
-    
-    // Create initial tab
-    this.createTab('https://www.google.com');
-  }
 
-  /**
-   * Create a new tab with a WebContentsView
-   */
-  public createTab(url?: string): TabInfo {
-    const tabId = `tab-${++this.tabCounter}`;
+    // Initialize managers
+    this.navigationManager = new NavigationManager();
+    this.debuggerManager = new DebuggerManager();
     
-    const view = new WebContentsView({
-      webPreferences: {
-        preload: path.join(__dirname, 'preload.js'),
-        contextIsolation: true,
-        nodeIntegration: false,
-        sandbox: true, // Fully sandboxed for security
-        webSecurity: true,
-        allowRunningInsecureContent: false,
-      },
-    });
-
-
-    let displayUrl = url ?? 'https://www.google.com';
-    let displayTitle = 'New Tab';
-    
-    if (url && url.startsWith('browzer://')) {
-      displayUrl = url;
-      const pathName = url.replace('browzer://', '');
-      
-      displayTitle = INTERNAL_PAGES.find(page => page.path === pathName).title || 'New Tab';
-    }
-
-    const tabInfo: TabInfo = {
-      id: tabId,
-      title: displayTitle,
-      url: displayUrl,
-      isLoading: false,
-      canGoBack: false,
-      canGoForward: false,
+    // Setup event handlers for TabManager
+    const tabEventHandlers: TabEventHandlers = {
+      onTabsChanged: () => this.notifyTabsChanged(),
+      onCredentialSelected: (tabId, credentialId, username) => 
+        this.tabManager.handleCredentialSelected(tabId, credentialId, username),
+      onAutoFillPassword: (tabId) => 
+        this.tabManager.handleAutoFillPassword(tabId)
     };
 
-    const tab: Tab = {
-      id: tabId,
-      view,
-      info: tabInfo,
-      videoRecorder: new VideoRecorder(view),
-      passwordAutomation: new PasswordAutomation(
-        view, 
-        this.passwordManager, 
-        tabId,
-        this.handleCredentialSelected.bind(this),
-        this.handleAutoFillPassword.bind(this)
-      ),
-      automationExecutor: new BrowserAutomationExecutor(view, tabId),
-    };
-
-    this.tabs.set(tabId, tab);
-
-    this.setupTabEvents(tab);
-
-    this.initializeTabDebugger(tab).catch(err => 
-      console.error('[BrowserManager] Failed to initialize debugger for tab:', tabId, err)
+    this.tabManager = new TabManager(
+      baseWindow,
+      agentUIHeight,
+      this.passwordManager,
+      this.historyService,
+      this.navigationManager,
+      this.debuggerManager,
+      tabEventHandlers
     );
 
-    this.baseWindow.contentView.addChildView(view);
-    
-    this.updateTabViewBounds(view, this.currentSidebarWidth);
+    this.recordingManager = new RecordingManager(
+      this.recordingStore,
+      agentUIView
+    );
 
-    const urlToLoad = url || 'https://www.google.com';
-    view.webContents.loadURL(this.normalizeURL(urlToLoad));
+    this.automationManager = new AutomationManager(
+      this.recordingStore,
+      agentUIView
+    );
 
-    this.switchToTab(tabId);
-
-    return tabInfo;
+    // Create initial tab
+    this.tabManager.createTab('https://www.google.com');
   }
 
-  /**
-   * Close a tab
-   */
+  // ============================================================================
+  // Tab Management (delegated to TabManager)
+  // ============================================================================
+
+  public createTab(url?: string): TabInfo {
+    return this.tabManager.createTab(url);
+  }
+
   public closeTab(tabId: string): boolean {
-    const tab = this.tabs.get(tabId);
-    if (!tab) return false;
-
-    // Remove view from window
-    this.baseWindow.contentView.removeChildView(tab.view);
-
-    // Clean up password automation
-    if (tab.passwordAutomation) {
-      tab.passwordAutomation.stop().catch(err => 
-        console.error('[BrowserManager] Error stopping password automation:', err)
-      );
-    }
-
-    this.cleanupTabDebugger(tab);
-
-    // Clean up
-    tab.view.webContents.close();
-    this.tabs.delete(tabId);
-
-    // If this was the active tab, switch to another
-    if (this.activeTabId === tabId) {
-      const remainingTabs = Array.from(this.tabs.keys());
-      if (remainingTabs.length > 0) {
-        this.switchToTab(remainingTabs[0]);
-      } else {
-        this.activeTabId = null;
-        // Create a new tab if all tabs are closed
-        this.createTab('https://www.google.com');
-      }
-    }
-
-    // Notify renderer
-    this.notifyTabsChanged();
-    return true;
+    return this.tabManager.closeTab(tabId);
   }
 
-  /**
-   * Switch to a specific tab
-   */
   public switchToTab(tabId: string): boolean {
-    const tab = this.tabs.get(tabId);
-    if (!tab) return false;
-
-    const previousTabId = this.activeTabId;
-
-    // Hide current active tab
-    if (this.activeTabId && this.activeTabId !== tabId) {
-      const currentTab = this.tabs.get(this.activeTabId);
-      if (currentTab) {
-        currentTab.view.setVisible(false);
+    const previousTabId = this.tabManager.getActiveTabId();
+    const success = this.tabManager.switchToTab(tabId);
+    
+    // Handle recording tab switch if recording is active
+    if (success && this.recordingManager.isRecordingActive() && previousTabId && previousTabId !== tabId) {
+      const newTab = this.tabManager.getTab(tabId);
+      if (newTab) {
+        this.recordingManager.handleTabSwitch(previousTabId, newTab);
       }
     }
-
-    // Show new tab
-    tab.view.setVisible(true);
-    this.activeTabId = tabId;
-
-    // Bring to front (re-add to ensure it's on top)
-    this.baseWindow.contentView.removeChildView(tab.view);
-    this.baseWindow.contentView.addChildView(tab.view);
-    // Note: updateLayout will be called with proper sidebar width
-
-    // Handle recording tab switch (only if actually switching between different tabs)
-    if (this.isRecording && previousTabId && previousTabId !== tabId) {
-      this.handleRecordingTabSwitch(previousTabId, tabId, tab);
-    }
-
-    // Notify renderer
-    this.notifyTabsChanged();
-    return true;
+    
+    return success;
   }
 
-  /**
-   * Navigate a tab to a URL
-   */
   public navigate(tabId: string, url: string): boolean {
-    const tab = this.tabs.get(tabId);
-    if (!tab) return false;
-
-    const normalizedURL = this.normalizeURL(url);
-    tab.view.webContents.loadURL(normalizedURL);
-    return true;
+    return this.tabManager.navigate(tabId, url);
   }
 
-  /**
-   * Navigation controls
-   */
   public goBack(tabId: string): boolean {
-    const tab = this.tabs.get(tabId);
-    if (!tab || !tab.view.webContents.navigationHistory.canGoBack()) return false;
-    tab.view.webContents.navigationHistory.goBack();
-    return true;
+    return this.tabManager.goBack(tabId);
   }
 
   public goForward(tabId: string): boolean {
-    const tab = this.tabs.get(tabId);
-    if (!tab || !tab.view.webContents.navigationHistory.canGoForward()) return false;
-    tab.view.webContents.navigationHistory.goForward();
-    return true;
+    return this.tabManager.goForward(tabId);
   }
 
   public reload(tabId: string): boolean {
-    const tab = this.tabs.get(tabId);
-    if (!tab) return false;
-    tab.view.webContents.reload();
-    return true;
+    return this.tabManager.reload(tabId);
   }
 
   public stop(tabId: string): boolean {
-    const tab = this.tabs.get(tabId);
-    if (!tab) return false;
-    tab.view.webContents.stop();
-    return true;
+    return this.tabManager.stop(tabId);
   }
 
   public canGoBack(tabId: string): boolean {
-    const tab = this.tabs.get(tabId);
-    return tab ? tab.view.webContents.navigationHistory.canGoBack() : false;
+    return this.tabManager.canGoBack(tabId);
   }
 
   public canGoForward(tabId: string): boolean {
-    const tab = this.tabs.get(tabId);
-    return tab ? tab.view.webContents.navigationHistory.canGoForward() : false;
+    return this.tabManager.canGoForward(tabId);
   }
 
-  /**
-   * Get all tabs info
-   */
   public getAllTabs(): { tabs: TabInfo[]; activeTabId: string | null } {
-    const tabs = Array.from(this.tabs.values()).map(tab => tab.info);
-    return { tabs, activeTabId: this.activeTabId };
+    return this.tabManager.getAllTabs();
   }
 
-  /**
-   * Start recording actions and video on active tab
-   */
+  // ============================================================================
+  // Recording Management (delegated to RecordingManager)
+  // ============================================================================
+
   public async startRecording(): Promise<boolean> {
-    if (!this.activeTabId) {
+    const activeTab = this.tabManager.getActiveTab();
+    if (!activeTab) {
       console.error('No active tab to record');
       return false;
     }
 
-    const tab = this.tabs.get(this.activeTabId);
-    if (!tab || !tab.videoRecorder) {
-      console.error('Tab or recorders not found');
-      return false;
-    }
-
-    try {
-      // Generate unique recording ID
-      this.currentRecordingId = `rec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      
-      // Initialize recording tabs map
-      this.recordingTabs.clear();
-      this.lastActiveTabId = this.activeTabId;
-      
-      // Add initial tab to recording tabs
-      this.recordingTabs.set(this.activeTabId, {
-        tabId: this.activeTabId,
-        webContentsId: tab.view.webContents.id,
-        title: tab.info.title,
-        url: tab.info.url,
-        firstActiveAt: Date.now(),
-        lastActiveAt: Date.now(),
-        actionCount: 0
-      });
-
-       // Set up centralized recorder with current tab
-      this.centralRecorder.setView(tab.view);
-      this.centralRecorder.setActionCallback((action) => {
-        if (action.verified) {
-          // Update action count for the tab
-          const tabInfo = this.recordingTabs.get(action.tabId || this.activeTabId || '');
-          if (tabInfo) {
-            tabInfo.actionCount++;
-          }
-          
-          if (this.agentUIView && !this.agentUIView.webContents.isDestroyed()) {
-            this.agentUIView.webContents.send('recording:action-captured', action);
-          }
-        }
-      });
-
-      // Start action recording with tab context and recordingId for snapshots
-      await this.centralRecorder.startRecording(
-        this.activeTabId,
-        tab.info.url,
-        tab.info.title,
-        tab.view.webContents.id,
-        this.currentRecordingId
-      );
-      
-      // Start video recording on active tab
-      this.activeVideoRecorder = tab.videoRecorder;
-      const videoStarted = await this.activeVideoRecorder.startRecording(this.currentRecordingId);
-      
-      if (!videoStarted) {
-        console.warn('⚠️ Video recording failed to start, continuing with action recording only');
-        this.activeVideoRecorder = null;
-      }
-      
-      this.isRecording = true;
-      this.recordingStartTime = Date.now();
-      this.recordingStartUrl = tab.info.url;
-      
-      console.log('🎬 Recording started (actions + video) on tab:', this.activeTabId);
-      
-      if (this.agentUIView && !this.agentUIView.webContents.isDestroyed()) {
-        this.agentUIView.webContents.send('recording:started');
-      }
-      
-      return true;
-    } catch (error) {
-      console.error('Failed to start recording:', error);
-      return false;
-    }
+    return this.recordingManager.startRecording(activeTab);
   }
 
-  /**
-   * Stop recording and return actions (don't save yet)
-   */
   public async stopRecording(): Promise<RecordedAction[]> {
-    if (!this.activeTabId) {
-      console.error('No active tab');
-      return [];
-    }
-
-    const tab = this.tabs.get(this.activeTabId);
-    if (!tab) {
-      console.error('Tab not found');
-      return [];
-    }
-
-    // Stop centralized action recording (now async for snapshot finalization)
-    const actions = await this.centralRecorder.stopRecording();
-    
-    // Stop video recording from active video recorder
-    let videoPath: string | null = null;
-    if (this.activeVideoRecorder && this.activeVideoRecorder.isActive()) {
-      videoPath = await this.activeVideoRecorder.stopRecording();
-      console.log('🎥 Video recording stopped:', videoPath || 'no video');
-      this.activeVideoRecorder = null;
-    } else {
-      console.warn('⚠️ No active video recorder to stop');
-    }
-    
-    this.isRecording = false;
-    
-    const duration = Date.now() - this.recordingStartTime;
-    console.log('⏹️ Recording stopped. Duration:', duration, 'ms, Actions:', actions.length);
-
-    const tabSwitchCount = this.countTabSwitchActions(actions);
-    
-    // Notify renderer that recording stopped (with actions for preview)
-    if (this.agentUIView && !this.agentUIView.webContents.isDestroyed()) {
-      this.agentUIView.webContents.send('recording:stopped', {
-        actions,
-        duration,
-        startUrl: this.recordingStartUrl,
-        videoPath,
-        tabs: Array.from(this.recordingTabs.values()),
-        tabSwitchCount
-      });
-    }
-    
-    return actions;
+    return this.recordingManager.stopRecording(this.tabManager.getTabs());
   }
 
-  /**
-   * Save recording session with video and multi-tab metadata
-   */
-  public async saveRecording(name: string, description: string, actions: RecordedAction[]): Promise<string> {
-    let videoPath = this.activeVideoRecorder?.getVideoPath();
-    
-    if (!videoPath && this.currentRecordingId) {
-      for (const tab of this.tabs.values()) {
-        const tabVideoPath = tab.videoRecorder?.getVideoPath();
-        if (tabVideoPath && tabVideoPath.includes(this.currentRecordingId)) {
-          videoPath = tabVideoPath;
-          console.log('📹 Found video path from tab recorder:', videoPath);
-          break;
-        }
-      }
-    }
-    
-    // Get video metadata if available
-    let videoSize: number | undefined;
-    let videoDuration: number | undefined;
-    
-    if (videoPath) {
-      try {
-        const stats = await stat(videoPath);
-        videoSize = stats.size;
-        videoDuration = Date.now() - this.recordingStartTime;
-      } catch (error) {
-        console.error('Failed to get video stats:', error);
-      }
-    }
-
-    // Get snapshot statistics
-    const snapshotStats = await this.centralRecorder.getSnapshotStats();
-    
-    const tabSwitchCount = this.countTabSwitchActions(actions);
-    const firstTab = this.recordingTabs.values().next().value;
-    
-    const session: RecordingSession = {
-      id: this.currentRecordingId || `rec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+  public async saveRecording(
+    name: string,
+    description: string,
+    actions: RecordedAction[]
+  ): Promise<string> {
+    return this.recordingManager.saveRecording(
       name,
       description,
       actions,
-      createdAt: this.recordingStartTime,
-      duration: Date.now() - this.recordingStartTime,
-      actionCount: actions.length,
-      url: this.recordingStartUrl,
-
-      // Multi-tab metadata
-      startTabId: firstTab?.tabId,
-      tabs: Array.from(this.recordingTabs.values()),
-      tabSwitchCount,
-      
-      // Video metadata
-      videoPath,
-      videoSize,
-      videoFormat: videoPath ? 'webm' : undefined,
-      videoDuration,
-      
-      // Snapshot metadata
-      snapshotCount: snapshotStats.count,
-      snapshotsDirectory: snapshotStats.directory,
-      totalSnapshotSize: snapshotStats.totalSize
-    };
-
-    this.recordingStore.saveRecording(session);
-    console.log('💾 Recording saved:', session.id, session.name);
-    console.log('📊 Multi-tab session:', this.recordingTabs.size, 'tabs,', tabSwitchCount, 'switches');
-    if (videoPath && videoSize) {
-      console.log('🎥 Video included:', videoPath, `(${(videoSize / 1024 / 1024).toFixed(2)} MB)`);
-    }
-    if (snapshotStats.count > 0) {
-      console.log('📸 Snapshots captured:', snapshotStats.count, `(${(snapshotStats.totalSize / 1024 / 1024).toFixed(2)} MB)`);
-    }
-    
-    // Notify renderer
-    if (this.agentUIView && !this.agentUIView.webContents.isDestroyed()) {
-      this.agentUIView.webContents.send('recording:saved', session);
-    }
-    
-    // Reset recording ID
-    this.currentRecordingId = null;
-    this.recordingTabs.clear();
-    this.lastActiveTabId = null;
-    
-    return session.id;
+      this.tabManager.getTabs()
+    );
   }
 
-  /**
-   * Get all recordings
-   */
+  public isRecordingActive(): boolean {
+    return this.recordingManager.isRecordingActive();
+  }
+
+  public getRecordedActions(): RecordedAction[] {
+    return this.recordingManager.getRecordedActions();
+  }
+
   public getRecordingStore(): RecordingStore {
-    return this.recordingStore;
+    return this.recordingManager.getRecordingStore();
   }
 
-  /**
-   * Execute LLM-powered automation on the active tab (NON-BLOCKING)
-   * 
-   * @param userGoal - What the user wants to automate
-   * @param recordedSessionId - ID of recorded session to use as reference
-   * @returns Session info for tracking with persistent session ID
-   */
+  public async deleteRecording(id: string): Promise<boolean> {
+    return this.recordingManager.deleteRecording(id);
+  }
+
+  // ============================================================================
+  // Automation Management (delegated to AutomationManager)
+  // ============================================================================
+
   public async executeIterativeAutomation(
     userGoal: string,
     recordedSessionId: string
@@ -522,658 +199,78 @@ export class BrowserManager {
     sessionId: string;
     message: string;
   }> {
+    const activeTab = this.tabManager.getActiveTab();
+    if (!activeTab) {
+      throw new Error('No active tab for automation');
+    }
 
-    const tab = this.tabs.get(this.activeTabId);
-
-    // Create AutomationService with SessionManager
-    const llmService = new AutomationService(
-      tab.automationExecutor,
-      this.recordingStore,
-      process.env.ANTHROPIC_API_KEY
+    return this.automationManager.executeAutomation(
+      activeTab,
+      userGoal,
+      recordedSessionId
     );
-
-    // Start automation execution (non-blocking)
-    // This will create a persistent session in the database
-    const automationPromise = llmService.executeAutomation(userGoal, recordedSessionId, 20);
-
-    // Get the persistent session ID from the service
-    // Wait a moment for the session to be created
-    await new Promise(resolve => setTimeout(resolve, 100));
-    const sessionId = llmService.getSessionId();
-
-    if (!sessionId) {
-      throw new Error('Failed to create automation session');
-    }
-
-    // Store service with persistent session ID
-    this.automationSessions.set(sessionId, llmService);
-
-    // Set up progress event forwarding
-    llmService.on('progress', (event) => {
-      if (this.agentUIView && !this.agentUIView.webContents.isDestroyed()) {
-        this.agentUIView.webContents.send('automation:progress', {
-          sessionId,
-          event
-        });
-      }
-    });
-
-    // Handle automation completion/error (non-blocking)
-    automationPromise
-      .then(result => {
-        if (this.agentUIView && !this.agentUIView.webContents.isDestroyed()) {
-          this.agentUIView.webContents.send('automation:complete', {
-            sessionId,
-            result
-          });
-        }
-
-        this.automationSessions.delete(sessionId);
-      })
-      .catch(error => {
-        console.error('[BrowserManager] LLM automation failed:', error);
-        
-        if (this.agentUIView && !this.agentUIView.webContents.isDestroyed()) {
-          this.agentUIView.webContents.send('automation:error', {
-            sessionId,
-            error: error instanceof Error ? error.message : 'Unknown error'
-          });
-        }
-
-        this.automationSessions.delete(sessionId);
-      });
-
-    return {
-      success: true,
-      sessionId,
-      message: 'Automation started successfully'
-    };
   }
 
-  /**
-   * Delete recording (including video file)
-   */
-  public async deleteRecording(id: string): Promise<boolean> {
-    const success = await this.recordingStore.deleteRecording(id);
-    
-    if (success && this.agentUIView && !this.agentUIView.webContents.isDestroyed()) {
-      this.agentUIView.webContents.send('recording:deleted', id);
-    }
-    
-    return success;
-  }
-
-  /**
-   * Load automation session from database
-   */
   public async loadAutomationSession(sessionId: string): Promise<any> {
-    try {
-      // Get the automation service's session manager
-      // For now, create a temporary session manager to load the session
-      const { SessionManager } = await import('./llm/session/SessionManager');
-      const sessionManager = new SessionManager();
-      
-      const sessionData = sessionManager.loadSession(sessionId);
-      
-      if (!sessionData) {
-        return null;
-      }
-      
-      // Convert to format expected by renderer
-      return {
-        sessionId: sessionData.session.id,
-        userGoal: sessionData.session.userGoal,
-        recordingId: sessionData.session.recordingId,
-        status: sessionData.session.status,
-        events: sessionData.messages.map(msg => ({
-          id: `msg_${msg.id}`,
-          sessionId: sessionData.session.id,
-          type: msg.role === 'assistant' ? 'claude_response' : 'user_message',
-          data: { message: JSON.stringify(msg.content) },
-          timestamp: msg.createdAt
-        })),
-        result: sessionData.session.metadata.finalSuccess,
-        error: sessionData.session.metadata.finalError,
-        startTime: sessionData.session.createdAt,
-        endTime: sessionData.session.completedAt
-      };
-    } catch (error) {
-      console.error('[BrowserManager] Failed to load session:', error);
-      return null;
-    }
+    return this.automationManager.loadAutomationSession(sessionId);
   }
 
-  /**
-   * Get automation session history
-   */
   public async getAutomationSessionHistory(limit = 5): Promise<any[]> {
-    try {
-      const { SessionManager } = await import('./llm/session/SessionManager');
-      const sessionManager = new SessionManager();
-      
-      const sessions = sessionManager.listSessions(limit, 0);
-      
-      return sessions.map(session => ({
-        sessionId: session.id,
-        userGoal: session.userGoal,
-        recordingId: session.recordingId,
-        status: session.status,
-        createdAt: session.createdAt,
-        updatedAt: session.updatedAt,
-        messageCount: session.messageCount,
-        stepCount: session.stepCount
-      }));
-    } catch (error) {
-      console.error('[BrowserManager] Failed to load session history:', error);
-      return [];
-    }
+    return this.automationManager.getAutomationSessionHistory(limit);
   }
 
-  /**
-   * Delete automation session
-   */
   public async deleteAutomationSession(sessionId: string): Promise<boolean> {
-    try {
-      const { SessionManager } = await import('./llm/session/SessionManager');
-      const sessionManager = new SessionManager();
-      
-      sessionManager.deleteSession(sessionId);
-      return true;
-    } catch (error) {
-      console.error('[BrowserManager] Failed to delete session:', error);
-      return false;
-    }
+    return this.automationManager.deleteAutomationSession(sessionId);
   }
 
-  /**
-   * Check if recording is active
-   */
-  public isRecordingActive(): boolean {
-    return this.isRecording;
-  }
+  // ============================================================================
+  // Service Accessors (for IPCHandlers)
+  // ============================================================================
 
-  /**
-   * Get recorded actions from centralized recorder
-   */
-  public getRecordedActions(): RecordedAction[] {
-    return this.centralRecorder.getActions();
-  }
-
-  /**
-   * Handle tab switch during recording
-   */
-  private async handleRecordingTabSwitch(previousTabId: string | null, newTabId: string, newTab: Tab): Promise<void> {
-    try {
-      console.log(`🔄 Tab switch detected during recording: ${previousTabId} -> ${newTabId}`);
-      
-      // Record tab-switch action
-      const tabSwitchAction: RecordedAction = {
-        type: 'tab-switch',
-        timestamp: Date.now(),
-        tabId: newTabId,
-        tabUrl: newTab.info.url,
-        tabTitle: newTab.info.title,
-        webContentsId: newTab.view.webContents.id,
-        metadata: {
-          fromTabId: previousTabId,
-          toTabId: newTabId,
-          fromTabUrl: previousTabId ? this.tabs.get(previousTabId)?.info.url : undefined,
-          toTabUrl: newTab.info.url
-        },
-        verified: true,
-        verificationTime: 0
-      };
-      
-      // Add to actions through the recorder
-      this.centralRecorder.addAction(tabSwitchAction);
-      
-      // Notify renderer via the action callback (which is already set up)
-      // This ensures it goes through the same path as other actions
-      const callback = this.centralRecorder['onActionCallback'];
-      if (callback) {
-        callback(tabSwitchAction);
-      }
-      
-      // Update or add tab to recording tabs
-      const now = Date.now();
-      if (!this.recordingTabs.has(newTabId)) {
-        this.recordingTabs.set(newTabId, {
-          tabId: newTabId,
-          webContentsId: newTab.view.webContents.id,
-          title: newTab.info.title,
-          url: newTab.info.url,
-          firstActiveAt: now,
-          lastActiveAt: now,
-          actionCount: 0
-        });
-      } else {
-        const tabInfo = this.recordingTabs.get(newTabId);
-        if (tabInfo) {
-          tabInfo.lastActiveAt = now;
-          tabInfo.title = newTab.info.title; // Update in case it changed
-          tabInfo.url = newTab.info.url;
-        }
-      }
-      
-      // Switch the centralized recorder to the new tab
-      await this.centralRecorder.switchWebContents(
-        newTab.view,
-        newTabId,
-        newTab.info.url,
-        newTab.info.title
-      );
-      
-      this.lastActiveTabId = newTabId;
-      
-      console.log('✅ Recording switched to new tab successfully');
-      
-    } catch (error) {
-      console.error('Failed to handle recording tab switch:', error);
-    }
-  }
-
-  /**
-   * Count tab-switch actions in recorded actions
-   */
-  private countTabSwitchActions(actions: RecordedAction[]): number {
-    return actions.filter(action => action.type === 'tab-switch').length;
-  }
-
-  /**
-   * Update layout when window resizes or sidebar changes
-   */
-  public updateLayout(_windowWidth: number, _windowHeight: number, sidebarWidth = 0): void {
-    // Store current sidebar width
-    this.currentSidebarWidth = sidebarWidth;
-    
-    // Update all tab views with sidebar offset
-    this.tabs.forEach(tab => {
-      this.updateTabViewBounds(tab.view, sidebarWidth);
-    });
-  }
-
-  /**
-   * Clean up all tabs
-   */
-  public destroy(): void {
-    this.tabs.forEach(tab => {
-      this.cleanupTabDebugger(tab);
-      this.baseWindow.contentView.removeChildView(tab.view);
-      tab.view.webContents.close();
-    });
-    this.tabs.clear();
-    this.recordingTabs.clear();
-  }
-
-  /**
-   * Initialize centralized debugger for a tab
-   * Attaches debugger and enables all required CDP domains
-   */
-  private async initializeTabDebugger(tab: Tab): Promise<void> {
-    try {
-      const cdpDebugger = tab.view.webContents.debugger;
-      
-      // Attach debugger if not already attached
-      if (!cdpDebugger.isAttached()) {
-        cdpDebugger.attach('1.3');
-        console.log(`✅ [Debugger] Attached to tab: ${tab.id}`);
-      }
-      
-      // Enable all required CDP domains for all services
-      await Promise.all([
-        cdpDebugger.sendCommand('DOM.enable'),
-        cdpDebugger.sendCommand('Page.enable'),
-        cdpDebugger.sendCommand('Runtime.enable'),
-        cdpDebugger.sendCommand('Network.enable'),
-        cdpDebugger.sendCommand('Console.enable'),
-        cdpDebugger.sendCommand('Log.enable'),
-      ]);
-      
-      // Get initial document
-      await cdpDebugger.sendCommand('DOM.getDocument', { depth: -1 });
-      
-      console.log(`✅ [Debugger] CDP domains enabled for tab: ${tab.id}`);
-      
-    } catch (error) {
-      console.error(`[Debugger] Failed to initialize for tab ${tab.id}:`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * Cleanup debugger for a tab
-   * Detaches debugger when tab is closed
-   */
-  private cleanupTabDebugger(tab: Tab): void {
-    const cdpDebugger = tab.view.webContents.debugger;
-    
-    if (cdpDebugger.isAttached()) {
-      cdpDebugger.detach();
-      console.log(`✅ [Debugger] Detached from tab: ${tab.id}`);
-    }
-  }
-
-  /**
-   * Setup event listeners for a tab's WebContents
-   */
-  private setupTabEvents(tab: Tab): void {
-    const { view, info } = tab;
-    const webContents = view.webContents;
-
-    // Page title updated
-    webContents.on('page-title-updated', (_, title) => {
-      const internalPageTitle = this.getInternalPageTitle(info.url);
-      if (internalPageTitle) {
-        info.title = internalPageTitle;
-      } else {
-        info.title = title || 'Untitled';
-      }
-      this.notifyTabsChanged();
-    });
-
-    // Navigation events
-    webContents.on('did-start-loading', () => {
-      info.isLoading = true;
-      this.notifyTabsChanged();
-    });
-
-    webContents.on('did-stop-loading', async () => {
-      info.isLoading = false;
-      info.canGoBack = webContents.navigationHistory.canGoBack();
-      info.canGoForward = webContents.navigationHistory.canGoForward();
-      
-      if (info.url && info.title) {
-        this.historyService.addEntry(
-          info.url,
-          info.title,
-          HistoryTransition.LINK,
-          info.favicon
-        ).catch(err => console.error('Failed to add history entry:', err));
-      }
-      
-      // Start CDP-based password automation
-      if (tab.passwordAutomation && !this.isInternalPage(info.url)) {
-        try {
-          await tab.passwordAutomation.start();
-        } catch (error) {
-          console.error('[BrowserManager] Failed to start password automation:', error);
-        }
-      }
-      
-      this.notifyTabsChanged();
-    });
-
-    webContents.on('did-navigate', (_, url) => {
-      // Convert internal page URLs to browzer:// protocol
-      const internalPageInfo = this.getInternalPageInfo(url);
-      if (internalPageInfo) {
-        info.url = internalPageInfo.url;
-        info.title = internalPageInfo.title;
-      } else {
-        info.url = url;
-      }
-      info.canGoBack = webContents.navigationHistory.canGoBack();
-      info.canGoForward = webContents.navigationHistory.canGoForward();
-      this.notifyTabsChanged();
-    });
-
-    webContents.on('did-navigate-in-page', (_, url) => {
-      // Convert internal page URLs to browzer:// protocol
-      const internalPageInfo = this.getInternalPageInfo(url);
-      if (internalPageInfo) {
-        info.url = internalPageInfo.url;
-        info.title = internalPageInfo.title;
-      } else {
-        info.url = url;
-      }
-      info.canGoBack = webContents.navigationHistory.canGoBack();
-      info.canGoForward = webContents.navigationHistory.canGoForward();
-      this.notifyTabsChanged();
-    });
-
-    // Favicon
-    webContents.on('page-favicon-updated', (_, favicons) => {
-      if (!info.url.includes('browzer://settings') && favicons.length > 0) {
-        info.favicon = favicons[0];
-        this.notifyTabsChanged();
-      }
-    });
-
-    // Handle new window requests (open in new tab)
-    webContents.setWindowOpenHandler(({ url }) => {
-      this.createTab(url);
-      return { action: 'deny' }; // Deny the default window creation
-    });
-
-    // Add context menu for right-click
-    webContents.on('context-menu', (_event: any, params: any) => {
-      const menu = Menu.buildFromTemplate([
-        {
-          label: 'Inspect Element',
-          click: () => {
-            webContents.inspectElement(params.x, params.y);
-          }
-        },
-        { type: 'separator' },
-        { role: 'reload' },
-        { role: 'forceReload' },
-        { type: 'separator' },
-        { role: 'copy' },
-        { role: 'paste' },
-        { role: 'selectAll' },
-      ]);
-      menu.popup();
-    });
-
-    // Handle keyboard shortcuts
-    webContents.on('before-input-event', (event: any, input: any) => {
-      // Cmd/Ctrl + Shift + I to open DevTools
-      if ((input.control || input.meta) && input.shift && input.key.toLowerCase() === 'i') {
-        event.preventDefault();
-        if (webContents.isDevToolsOpened()) {
-          webContents.closeDevTools();
-        } else {
-          webContents.openDevTools({ mode: 'right', activate: true });
-        }
-      }
-      // Cmd/Ctrl + Shift + C to open DevTools in inspect mode
-      else if ((input.control || input.meta) && input.shift && input.key.toLowerCase() === 'c') {
-        event.preventDefault();
-        webContents.openDevTools({ mode: 'right', activate: true });
-      }
-    });
-
-    // Error handling
-    webContents.on('did-fail-load', (_, errorCode, errorDescription, validatedURL) => {
-      if (errorCode !== -3) { // Ignore aborted loads
-        console.error(`Failed to load ${validatedURL}: ${errorDescription}`);
-      }
-      info.isLoading = false;
-      this.notifyTabsChanged();
-    });
-  }
-
-  /**
-   * Update bounds for a tab view
-   * @param sidebarWidth - Width of sidebar in pixels (0 if hidden)
-   */
-  private updateTabViewBounds(view: WebContentsView, sidebarWidth = 0): void {
-    const bounds = this.baseWindow.getBounds();
-    view.setBounds({
-      x: 0,
-      y: this.agentUIHeight,
-      width: bounds.width - sidebarWidth, // Reduce width when sidebar is visible
-      height: bounds.height - this.agentUIHeight,
-    });
-  }
-
-  /**
-   * Normalize URL (add protocol if missing)
-   */
-  private normalizeURL(url: string): string {
-    const trimmed = url.trim();
-    
-    if (trimmed.startsWith('browzer://')) {
-      return this.handleInternalURL(trimmed);
-    }
-    
-    // If it looks like a URL with protocol, use it as is
-    if (/^[a-z]+:\/\//i.test(trimmed)) {
-      return trimmed;
-    }
-    
-    // If it looks like a domain, add https://
-    if (/^[a-z0-9-]+\.[a-z]{2,}/i.test(trimmed)) {
-      return `https://${trimmed}`;
-    }
-    
-    // Otherwise, treat as search query
-    return `https://www.google.com/search?q=${encodeURIComponent(trimmed)}`;
-  }
-
-  /**
-   * Handle internal browzer:// URLs
-   * Supports: settings, history, recordings, downloads, etc.
-   */
-  private handleInternalURL(url: string): string {
-    const internalPath = url.replace('browzer://', '');
-    
-    const validPages = ['settings', 'history', 'recordings', 'profile', 'signin', 'signup'];
-    
-    if (validPages.includes(internalPath)) {
-      return this.generateInternalPageURL(internalPath);
-    }
-    
-    console.warn(`Unknown internal page: ${internalPath}`);
-    return 'https://www.google.com';
-  }
-
-  /**
-   * Generate internal page URL with hash routing
-   * @param pageName - Name of the internal page (settings, history, etc.)
-   */
-  private generateInternalPageURL(pageName: string): string {
-    // In development, use the dev server with a hash route
-    if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-      return `${MAIN_WINDOW_VITE_DEV_SERVER_URL}#/${pageName}`;
-    }
-    
-    // In production, use file protocol with hash route
-    return `file://${path.join(__dirname, `../../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`)}#/${pageName}`;
-  }
-
-  /**
-   * Get internal page info from URL
-   * Returns null if not an internal page
-   */
-  private getInternalPageInfo(url: string): { url: string; title: string } | null {
-    for (const page of INTERNAL_PAGES) {
-      if (url.includes(`#/${page.path}`)) {
-        return {
-          url: `browzer://${page.path}`,
-          title: page.title,
-        };
-      }
-    }
-
-    return null;
-  }
-
-  /**
-   * Get internal page title from URL
-   */
-  private getInternalPageTitle(url: string): string | null {
-    const info = this.getInternalPageInfo(url);
-    return info?.title || null;
-  }
-
-  /**
-   * Check if URL is an internal page
-   */
-  private isInternalPage(url: string): boolean {
-    return url.startsWith('browzer://') || 
-           url.includes('index.html#/') ||
-           INTERNAL_PAGES.some(page => url.includes(`#/${page.path}`));
-  }
-
-  /**
-   * Get automation executor for active tab
-   */
-  public getActiveAutomationExecutor(): BrowserAutomationExecutor | null {
-    const activeTab = this.tabs.get(this.activeTabId || '');
-    return activeTab?.automationExecutor || null;
-  }
-
-  /**
-   * Get history service instance
-   */
   public getHistoryService(): HistoryService {
     return this.historyService;
   }
 
-  /**
-   * Get password manager instance
-   */
   public getPasswordManager(): PasswordManager {
     return this.passwordManager;
   }
+
+  public getActiveAutomationExecutor(): BrowserAutomationExecutor | null {
+    const activeTab = this.tabManager.getActiveTab();
+    return activeTab?.automationExecutor || null;
+  }
+
+  // ============================================================================
+  // Layout Management
+  // ============================================================================
+
+  public updateLayout(_windowWidth: number, _windowHeight: number, sidebarWidth = 0): void {
+    this.tabManager.updateLayout(sidebarWidth);
+  }
+
+  // ============================================================================
+  // Cleanup
+  // ============================================================================
+
+  public destroy(): void {
+    this.tabManager.destroy();
+    this.recordingManager.destroy();
+    this.automationManager.destroy();
+  }
+
+  // ============================================================================
+  // Private Methods
+  // ============================================================================
 
   /**
    * Notify renderer about tab changes
    */
   private notifyTabsChanged(): void {
-    // Send to all agent UI views
     const allViews = this.baseWindow.contentView.children;
     allViews.forEach(view => {
       if (view instanceof WebContentsView) {
         view.webContents.send('browser:tabs-updated', this.getAllTabs());
       }
     });
-  }
-
-
-  /**
-   * Handle credential selection for multi-step flows
-   */
-  private handleCredentialSelected(tabId: string, credentialId: string, username: string): void {
-    const tab = this.tabs.get(tabId);
-    if (tab) {
-      tab.selectedCredentialId = credentialId;
-      tab.selectedCredentialUsername = username;
-      // console.log('[BrowserManager] Stored selected credential for tab:', tabId, 'username:', username);
-    }
-  }
-
-  /**
-   * Handle auto-fill password request
-   */
-  private async handleAutoFillPassword(tabId: string): Promise<void> {
-    const tab = this.tabs.get(tabId);
-    if (!tab || !tab.selectedCredentialId) {
-      return;
-    }
-    
-    const password = this.passwordManager.getPassword(tab.selectedCredentialId);
-    if (!password) {
-      return;
-    }
-    
-    console.log('[BrowserManager] Auto-filling password for:', tab.selectedCredentialUsername);
-    
-    try {
-      // Use PasswordUtil for the actual password filling logic
-      await PasswordUtil.fillPassword(
-        tab.view,
-        password,
-        tab.selectedCredentialUsername
-      );
-      
-      // Clear selected credential after use
-      tab.selectedCredentialId = undefined;
-      tab.selectedCredentialUsername = undefined;
-      
-    } catch (error) {
-      console.error('[BrowserManager] Error auto-filling password:', error);
-    }
   }
 }
