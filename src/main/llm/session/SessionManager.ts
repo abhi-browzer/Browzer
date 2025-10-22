@@ -185,9 +185,6 @@ export class SessionManager {
     const result = this.contextManager.applyContextEditing(apiMessages);
 
     if (result.clearedCount > 0) {
-      console.log(
-        `[ContextEditing] Cleared ${result.clearedCount} tool uses (${result.clearedTokens} tokens) from session ${sessionId}`
-      );
 
       // Clear old messages from database
       const keepCount = messages.length - (result.clearedCount * 2); // Each tool use = 2 messages

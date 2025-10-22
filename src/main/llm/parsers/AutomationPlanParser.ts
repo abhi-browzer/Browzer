@@ -55,11 +55,6 @@ export class AutomationPlanParser {
         if (block.name === 'declare_plan_metadata') {
           planMetadata = block.input as any;
           metadataToolUseId = block.id; // Store the tool_use_id for tool_result
-          console.log(`\u2705 [PlanParser] Model declared plan type: ${planMetadata?.planType}`);
-          console.log(`   Reasoning: ${planMetadata?.reasoning}`);
-          if (planMetadata?.expectedNextSteps) {
-            console.log(`   Expected next: ${planMetadata.expectedNextSteps}`);
-          }
         } else {
           // Regular automation tool
           steps.push({
@@ -76,11 +71,7 @@ export class AutomationPlanParser {
     // Fallback to detection if metadata tool wasn't called (backward compatibility)
     const planType = planMetadata?.planType || this.detectPlanType(analysis, steps);
     const reasoning = planMetadata?.reasoning || this.extractPlanReasoning(analysis);
-    
-    if (!planMetadata) {
-      console.warn(`\u26a0\ufe0f  [PlanParser] Model did not call declare_plan_metadata tool - using fallback detection`);
-      console.log(`   Detected plan type: ${planType}`);
-    }
+  
 
     return {
       steps,

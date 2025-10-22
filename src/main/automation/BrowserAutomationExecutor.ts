@@ -67,7 +67,6 @@ export class BrowserAutomationExecutor {
    * @returns Tool execution result with success/error information
    */
   public async executeTool(toolName: string, params: any): Promise<ToolExecutionResult> {
-    console.log(`[BrowserAutomationExecutor] Executing tool: ${toolName}`);
 
     switch (toolName) {
       // Navigation operations

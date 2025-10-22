@@ -114,8 +114,6 @@ export class AutomationStateManager {
       finalError: session.metadata.finalError
     };
 
-    console.log(`✅ [SessionManager] Loaded session ${sessionId} with ${messages.length} messages and ${steps.length} steps`);
-
     return state;
   }
 

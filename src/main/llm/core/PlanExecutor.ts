@@ -52,7 +52,6 @@ export class PlanExecutor {
     result?: any;
     error?: string;
   }> {
-    console.log(`🔧 [Step ${stepNumber}] Executing ${step.toolName}...`);
 
     // Emit step start event
     this.eventEmitter.emit('progress', {
@@ -119,9 +118,6 @@ export class PlanExecutor {
         };
       }
 
-      // Success
-      console.log(`   ✅ Step ${stepNumber} completed`);
-      
       // Emit step complete event
       this.eventEmitter.emit('progress', {
         type: 'step_complete',

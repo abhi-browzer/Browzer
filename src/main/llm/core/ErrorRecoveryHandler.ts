@@ -47,8 +47,6 @@ export class ErrorRecoveryHandler {
     failedStep: any,
     result: ToolExecutionResult
   ): Promise<PlanExecutionResult> {
-    console.log('🔄 [ErrorRecovery] Initiating error recovery...');
-
     const currentPlan = this.stateManager.getCurrentPlan();
 
     if (!currentPlan) {
@@ -107,7 +105,6 @@ export class ErrorRecoveryHandler {
 
     // Parse new plan
     const newPlan = AutomationPlanParser.parsePlan(response);
-    console.log('📋 [ErrorRecovery] Recovery plan generated');
 
     // Update state
     this.stateManager.setCurrentPlan(newPlan);

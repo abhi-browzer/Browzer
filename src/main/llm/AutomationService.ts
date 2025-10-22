@@ -90,7 +90,6 @@ export class AutomationService extends EventEmitter {
       timestamp: Date.now()
     };
     this.emit('progress', event);
-    console.log(`[AutomationProgress] ${type}:`, data);
   }
 
   /**

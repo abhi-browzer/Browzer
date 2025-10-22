@@ -65,7 +65,7 @@ export class ClaudeClient {
         this.onThinking('Generating automation plan...');
       }
 
-      const response = await this.client.messages.create({
+      return await this.client.messages.create({
         model: this.model,
         max_tokens: this.maxTokens,
         system: systemBlocks,
@@ -77,12 +77,6 @@ export class ClaudeClient {
           }
         ]
       });
-
-      response.content.forEach((block) => {
-        console.log(block);
-      });
-
-      return response;
 
     } catch (error) {
       console.error('❌ [ClaudeClient] Failed to create automation plan:', error);
@@ -127,19 +121,24 @@ export class ClaudeClient {
         this.onThinking('Analyzing and generating next steps...');
       }
 
-      const response = await this.client.messages.create({
+      messages.forEach(message => {
+        console.log('message-role: ', message.role);
+        if (typeof message.content === 'string') {
+          console.log('message-content: ', message.content);
+        } else {
+          message.content.forEach(content => {
+            console.log('message-content: ', content);
+          })
+        }
+      })
+
+      return await this.client.messages.create({
         model: this.model,
         max_tokens: this.maxTokens,
         system: systemBlocks,
         tools: tools,
         messages: messages
       });
-
-      response.content.forEach((block) => {
-        console.log(block);
-      });
-
-      return response;
 
     } catch (error) {
       console.error('❌ [ClaudeClient] Failed to continue conversation:', error);
