@@ -52,7 +52,7 @@ export default function AgentView() {
   const isDisabled = currentSession?.status === 'running';
 
   return (
-    <section className="flex flex-col h-full">
+    <section className="flex flex-col justify-between h-full">
       {/* Header */}
       <AgentHeader
         viewMode={viewState}

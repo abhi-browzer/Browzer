@@ -116,12 +116,6 @@ export function RecordingView() {
           <Circle className={cn('size-3 rounded-full bg-red-300', isRecording && 'bg-red-600 animate-pulse')} />
           Live
         </TabsTrigger>
-         <TabsTrigger 
-          value="automation" 
-        >
-          <SparkleIcon className='size-3 text-primary' />
-          Automation
-        </TabsTrigger>
         <TabsTrigger 
           value="sessions"
         >
@@ -139,10 +133,6 @@ export function RecordingView() {
           onSave={handleSaveRecording}
           onDiscard={handleDiscardRecording}
         />
-      </TabsContent>
-
-      <TabsContent value="automation" className="p-4 space-y-4">
-         Empty for now
       </TabsContent>
 
       <TabsContent value="sessions" className="flex-1 m-0 p-0">

@@ -4,6 +4,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/renderer/ui/tabs';
 import { RecordingView } from './RecordingView';
 import { useSidebarStore } from '@/renderer/store/useSidebarStore';
 import AgentView from './AgentView';
+import { ErrorBoundary } from './ErrorBoundary';
 
 /**
  * Sidebar - Agent UI with tabbed interface
@@ -32,7 +33,8 @@ export function Sidebar() {
   }, [setActiveTab]);
 
   return (
-    <section className="h-full w-full flex flex-col ">
+    <ErrorBoundary>
+      <section className="h-full w-full flex flex-col ">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
         <TabsList className="w-full rounded-none p-0 h-auto">
           <TabsTrigger 
@@ -58,5 +60,6 @@ export function Sidebar() {
         </TabsContent>
       </Tabs>
     </section>
+    </ErrorBoundary>
   );
 }

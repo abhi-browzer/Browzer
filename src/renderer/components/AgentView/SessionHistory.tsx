@@ -9,7 +9,6 @@ import React from 'react';
 import { Clock, CheckCircle2, XCircle, Loader2, MessageSquare } from 'lucide-react';
 import { Card } from '@/renderer/ui/card';
 import { Badge } from '@/renderer/ui/badge';
-import { ScrollArea } from '@/renderer/ui/scroll-area';
 import { SessionHistoryProps } from './types';
 import { cn } from '@/renderer/lib/utils';
 
@@ -39,8 +38,7 @@ export function SessionHistory({
   }
 
   return (
-    <ScrollArea className="h-full">
-      <div className="p-6 space-y-3">
+   <div className="p-6 space-y-3 overflow-y-auto">
         <h3 className="text-sm font-semibold text-muted-foreground mb-4">
           Recent Sessions
         </h3>
@@ -88,6 +86,5 @@ export function SessionHistory({
           </Card>
         ))}
       </div>
-    </ScrollArea>
   );
 }
