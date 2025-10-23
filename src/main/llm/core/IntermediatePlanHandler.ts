@@ -93,7 +93,7 @@ export class IntermediatePlanHandler {
 
     const response = await this.claudeClient.continueConversation({
       systemPrompt,
-      messages: this.stateManager.getMessages(),
+      messages: this.stateManager.getOptimizedMessages(),
       tools,
       cachedContext: this.stateManager.getCachedContext()
     });
@@ -136,7 +136,7 @@ export class IntermediatePlanHandler {
 
     const response = await this.claudeClient.continueConversation({
       systemPrompt,
-      messages: this.stateManager.getMessages(),
+      messages: this.stateManager.getOptimizedMessages(),
       tools,
       cachedContext: this.stateManager.getCachedContext()
     });
@@ -199,7 +199,7 @@ export class IntermediatePlanHandler {
 
     const response = await this.claudeClient.continueConversation({
       systemPrompt,
-      messages: this.stateManager.getMessages(),
+      messages: this.stateManager.getOptimizedMessages(),
       tools,
       cachedContext: this.stateManager.getCachedContext()
     });

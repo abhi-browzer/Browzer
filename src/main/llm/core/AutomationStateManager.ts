@@ -5,6 +5,7 @@ import { RecordingSession } from '@/shared/types/recording';
 import { SystemPromptBuilder } from '../builders/SystemPromptBuilder';
 import { SessionManager } from '../session/SessionManager';
 import { MessageBuilder } from '../builders/MessageBuilder';
+import { ContextWindowManager } from '../utils/ContextWindowManager';
 import Anthropic from '@anthropic-ai/sdk';
 
 /**
@@ -256,6 +257,35 @@ export class AutomationStateManager {
    */
   public getMessages(): Anthropic.MessageParam[] {
     return this.state.messages;
+  }
+
+  /**
+   * Get optimized messages for API call
+   * 
+   * This applies context window optimization if messages exceed limits.
+   * Uses hybrid sliding window + summarization strategy.
+   * 
+   * Call this instead of getMessages() when sending to Claude API.
+   */
+  public getOptimizedMessages(): Anthropic.MessageParam[] {
+    const result = ContextWindowManager.optimizeMessages(
+      this.state.messages,
+      this.state.userGoal
+    );
+
+    // Update in-memory state with optimized messages if compression was applied
+    if (result.compressionApplied) {
+      this.state.messages = result.optimizedMessages;
+    }
+
+    return result.optimizedMessages;
+  }
+
+  /**
+   * Get context window statistics
+   */
+  public getContextWindowStats() {
+    return ContextWindowManager.getStats(this.state.messages);
   }
 
   /**

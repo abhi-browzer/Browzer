@@ -157,7 +157,7 @@ export class MessageBuilder {
             tool_use_id: step.toolUseId,
             content: JSON.stringify({
               success: false,
-              error: 'Step not executed - automation stopped before reaching this step',
+              error: 'Not executed - automation stopped before reaching this step',
               toolName: step.toolName
             }),
             is_error: true
@@ -170,7 +170,7 @@ export class MessageBuilder {
           tool_use_id: step.toolUseId,
           content: JSON.stringify({
             success: false,
-            error: 'Step not executed - automation stopped before reaching this step',
+            error: 'Not executed - automation stopped before reaching this step',
             toolName: step.toolName
           }),
           is_error: true
