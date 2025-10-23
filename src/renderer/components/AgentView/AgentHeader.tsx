@@ -38,16 +38,16 @@ export function AgentHeader({
             onValueChange={onRecordingSelect}
             disabled={isDisabled || isExistingSession}
           >
-            <SelectTrigger className='w-full'>
+            <SelectTrigger className='w-64 max-w-xs'>
               <SelectValue placeholder="Select a recorded session..." />
             </SelectTrigger>
-            <SelectContent align="start" side="bottom">
+            <SelectContent align="start" side="bottom" className="w-96 max-w-screen">
               {recordings.map((recording) => (
                 <SelectItem key={recording.id} value={recording.id}>
-                  <div className="flex flex-col items-start">
-                    <span className="font-medium">{recording.name}</span>
+                  <div className="flex flex-col items-start gap-1 w-80">
+                    <span className="font-medium truncate w-full">{recording.name}</span>
                     {recording.description && (
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs text-muted-foreground truncate w-full">
                         {recording.description}
                       </span>
                     )}
