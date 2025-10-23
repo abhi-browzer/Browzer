@@ -103,6 +103,8 @@ export class ErrorRecoveryHandler {
       content: response.content
     });
 
+    this.stateManager.compressAnalysisToolResults();
+
     // Parse new plan
     const newPlan = AutomationPlanParser.parsePlan(response);
 

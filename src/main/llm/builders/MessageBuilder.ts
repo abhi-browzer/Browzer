@@ -3,6 +3,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { ParsedAutomationPlan } from '../parsers/AutomationPlanParser';
 import { ExecutedStep } from '../core/types';
 import { ToolExecutionResult } from '@/shared/types';
+import { AnalysisToolResultManager } from '../utils/AnalysisToolResultManager';
 
 /**
  * MessageBuilder - Builds tool result messages for Claude conversations
@@ -12,12 +13,14 @@ import { ToolExecutionResult } from '@/shared/types';
  * - Format context data for Claude
  * - Create error messages
  * - Handle multi-step tool results
+ * - Optimize analysis tool results for context window efficiency
  * 
  * This module centralizes all message building logic for:
  * - Consistent message formatting
  * - Easy debugging of conversation flow
  * - Proper tool result handling
  * - Context data formatting
+ * - Smart compression of analysis tool results
  */
 export class MessageBuilder {
   /**
@@ -240,5 +243,35 @@ export class MessageBuilder {
         }
       ]
     };
+  }
+
+  /**
+   * Compress analysis tool results in messages
+   * 
+   * This should be called AFTER the model has received the latest analysis result.
+   * It keeps ONLY the most recent extract_context/take_snapshot result with full data,
+   * and compresses all older ones to minimal strings.
+   * 
+   * This dramatically reduces context window usage for long-running automations.
+   * 
+   * @param messages - Array of conversation messages
+   * @returns Compressed messages with statistics
+   */
+  public static compressAnalysisToolResults(
+    messages: Anthropic.MessageParam[]
+  ): {
+    compressedMessages: Anthropic.MessageParam[];
+    compressedCount: number;
+    estimatedTokensSaved: number;
+  } {
+    return AnalysisToolResultManager.compressAnalysisResults(messages);
+  }
+
+  /**
+   * Log analysis tool compression statistics
+   * Useful for debugging context window issues
+   */
+  public static logAnalysisToolStats(messages: Anthropic.MessageParam[]): void {
+    AnalysisToolResultManager.logCompressionStats(messages);
   }
 }

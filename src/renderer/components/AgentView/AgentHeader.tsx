@@ -38,7 +38,7 @@ export function AgentHeader({
             onValueChange={onRecordingSelect}
             disabled={isDisabled || isExistingSession}
           >
-            <SelectTrigger className='max-w-[90%]'>
+            <SelectTrigger className='w-full'>
               <SelectValue placeholder="Select a recorded session..." />
             </SelectTrigger>
             <SelectContent align="start" side="bottom">

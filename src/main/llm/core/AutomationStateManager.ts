@@ -4,6 +4,7 @@ import { ParsedAutomationPlan } from '../parsers/AutomationPlanParser';
 import { RecordingSession } from '@/shared/types/recording';
 import { SystemPromptBuilder } from '../builders/SystemPromptBuilder';
 import { SessionManager } from '../session/SessionManager';
+import { MessageBuilder } from '../builders/MessageBuilder';
 import Anthropic from '@anthropic-ai/sdk';
 
 /**
@@ -252,10 +253,9 @@ export class AutomationStateManager {
 
   /**
    * Get conversation messages
-   * Returns optimized messages with cache control if session manager is available
    */
   public getMessages(): Anthropic.MessageParam[] {
-    return this.sessionManager.getMessagesForAPI(this.sessionId);
+    return this.state.messages;
   }
 
   /**
@@ -363,5 +363,28 @@ export class AutomationStateManager {
    */
   public getSessionManager(): SessionManager | undefined {
     return this.sessionManager;
+  }
+
+  /**
+   * Compress analysis tool results in message history
+   * 
+   * Problem:
+   * - extract_context and take_snapshot return huge JSON payloads (10K-50K+ tokens)
+   * - These accumulate across intermediate plans, exploding context usage
+   * - Only the LATEST analysis result is actually useful to the model
+   * 
+   * Solution:
+   * - Keep only the most recent analysis result with full data
+   * - Compress all older ones to minimal strings
+   * - Call this AFTER the model receives each new analysis result
+   * 
+   * This can save 50K-200K+ tokens in long-running automations!
+   */
+  public compressAnalysisToolResults(): void {
+    const result = MessageBuilder.compressAnalysisToolResults(this.state.messages);
+    
+    if (result.compressedCount > 0) {
+      this.state.messages = result.compressedMessages;
+    }
   }
 }
