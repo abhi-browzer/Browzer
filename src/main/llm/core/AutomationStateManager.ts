@@ -164,8 +164,8 @@ export class AutomationStateManager {
       sessionId: this.sessionId,
       stepNumber: step.stepNumber,
       toolName: step.toolName,
-      input: step.result?.effects, // Store effects as input context
-      result: step.result,
+      effects: step.result?.effects, // Store effects as input context
+      result: this.isAnalysisTool(step.toolName) ? `${step.toolName} executed successfully` : step.result,
       success: step.success,
       error: step.error
     });
@@ -363,6 +363,10 @@ export class AutomationStateManager {
    */
   public getSessionManager(): SessionManager | undefined {
     return this.sessionManager;
+  }
+
+  private isAnalysisTool(toolName: string): boolean {
+    return toolName === 'extract_context' || toolName === 'take_snapshot';
   }
 
   /**

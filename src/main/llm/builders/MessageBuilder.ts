@@ -266,12 +266,4 @@ export class MessageBuilder {
   } {
     return AnalysisToolResultManager.compressAnalysisResults(messages);
   }
-
-  /**
-   * Log analysis tool compression statistics
-   * Useful for debugging context window issues
-   */
-  public static logAnalysisToolStats(messages: Anthropic.MessageParam[]): void {
-    AnalysisToolResultManager.logCompressionStats(messages);
-  }
 }

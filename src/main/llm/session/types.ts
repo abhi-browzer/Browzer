@@ -62,8 +62,8 @@ export interface StoredStep {
   stepNumber: number;
   toolName: string;
   toolUseId?: string;
-  input?: any;
-  result?: any;
+  effects?: any;
+  result: any;
   success: boolean;
   error?: string;
   tokens?: number;
@@ -184,8 +184,8 @@ export interface AddStepOptions {
   stepNumber: number;
   toolName: string;
   toolUseId?: string;
-  input?: any;
-  result?: any;
+  effects?: any;
+  result: any;
   success: boolean;
   error?: string;
   tokens?: number;

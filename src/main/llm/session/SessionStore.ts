@@ -86,7 +86,7 @@ export class SessionStore {
         step_number INTEGER NOT NULL,
         tool_name TEXT NOT NULL,
         tool_use_id TEXT,
-        input TEXT,
+        effects TEXT,
         result TEXT,
         success INTEGER NOT NULL,
         error TEXT,
@@ -334,7 +334,7 @@ export class SessionStore {
     
     const stmt = this.db.prepare(`
       INSERT INTO session_steps (
-        session_id, step_number, tool_name, tool_use_id, input, result, success, error, tokens, created_at
+        session_id, step_number, tool_name, tool_use_id, effects, result, success, error, tokens, created_at
       )
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
@@ -344,7 +344,7 @@ export class SessionStore {
       options.stepNumber,
       options.toolName,
       options.toolUseId || null,
-      options.input ? JSON.stringify(options.input) : null,
+      options.effects ? JSON.stringify(options.effects) : null,
       options.result ? JSON.stringify(options.result) : null,
       options.success ? 1 : 0,
       options.error || null,
@@ -358,7 +358,7 @@ export class SessionStore {
       stepNumber: options.stepNumber,
       toolName: options.toolName,
       toolUseId: options.toolUseId,
-      input: options.input,
+      effects: options.effects,
       result: options.result,
       success: options.success,
       error: options.error,
@@ -385,7 +385,7 @@ export class SessionStore {
       stepNumber: row.step_number,
       toolName: row.tool_name,
       toolUseId: row.tool_use_id,
-      input: row.input ? JSON.parse(row.input) : undefined,
+      effects: row.effects ? JSON.parse(row.effects) : undefined,
       result: row.result ? JSON.parse(row.result) : undefined,
       success: row.success === 1,
       error: row.error,

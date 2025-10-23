@@ -70,16 +70,11 @@ export class PlanExecutor {
     try {
       const startTime = Date.now();
       
-      // Execute the tool
       const result = await this.executor.executeTool(step.toolName, step.input);
-      
       const duration = Date.now() - startTime;
 
-      // Analysis tools (extract_context, take_snapshot) are ONLY special if they're the last step
-      // If there are more steps after them, they execute normally
       const isAnalysisTool = step.toolName === 'extract_context' || step.toolName === 'take_snapshot';
 
-      // Record execution
       const executedStep: ExecutedStep = {
         stepNumber,
         toolName: step.toolName,
@@ -90,11 +85,9 @@ export class PlanExecutor {
 
       this.stateManager.addExecutedStep(executedStep);
 
-      // Check if execution failed
       if (!result.success || result.error) {
         console.error(`   ❌ Step ${stepNumber} failed: ${result.error?.message || 'Unknown error'}`);
         
-        // Emit step error event
         this.eventEmitter.emit('progress', {
           type: 'step_error',
           data: {
@@ -118,7 +111,6 @@ export class PlanExecutor {
         };
       }
 
-      // Emit step complete event
       this.eventEmitter.emit('progress', {
         type: 'step_complete',
         data: {
@@ -143,7 +135,6 @@ export class PlanExecutor {
     } catch (error: any) {
       console.error(`   ❌ Step ${stepNumber} failed:`, error.message);
 
-      // Record failed step
       const executedStep: ExecutedStep = {
         stepNumber,
         toolName: step.toolName,
@@ -179,7 +170,6 @@ export class PlanExecutor {
 
       const stepResult = await this.executeStep(step, stepNumber, totalSteps);
 
-      // Handle step failure
       if (!stepResult.success) {
         return {
           success: false,

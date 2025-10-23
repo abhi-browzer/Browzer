@@ -14,10 +14,6 @@ import Anthropic from '@anthropic-ai/sdk';
  * - All previous analysis results are compressed to minimal strings
  * - Compression happens immediately after model receives the full result
  * 
- * Based on Anthropic best practices:
- * - LONG_CONTEXT_TIPS.md: Only latest context is relevant
- * - TOKEN_EFFICIENT_TOOL_USE.md: Minimize tool result sizes
- * - CONTEXT_WINDOW.md: Manage token budget efficiently
  */
 export class AnalysisToolResultManager {
   // Analysis tools that return large payloads
@@ -88,50 +84,22 @@ export class AnalysisToolResultManager {
       }
     });
 
-    // CRITICAL FIX: Compress ALL analysis results except the very last one
-    // Even if there's only 1 result, we should keep it for now but be ready to compress it
-    // when the next analysis tool is called
-    
     if (analysisResultIndices.length === 0) {
-      // No analysis results at all
       return {
         compressedMessages: messages,
         compressedCount: 0,
         estimatedTokensSaved: 0
       };
     }
-
-    // If we have 1 or more analysis results, compress all except the last one
-    // For length=1, this means we keep the 1 result (nothing to compress yet)
-    // For length=2+, we compress all older ones
-    // const toCompress = analysisResultIndices.slice(0, -1);
     
-    // if (toCompress.length === 0) {
-    //   // Only 1 analysis result exists, nothing to compress yet
-    //   console.log(`✅ [AnalysisToolCompression] Found 1 analysis result, keeping it as latest`);
-    //   return {
-    //     compressedMessages: messages,
-    //     compressedCount: 0,
-    //     estimatedTokensSaved: 0
-    //   };
-    // }
-
-    // We have 2+ analysis results, compress the older ones
-    console.log(`🗜️  [AnalysisToolCompression] Found ${analysisResultIndices.length} analysis results, compressing ${analysisResultIndices.length} older ones`);
-    
-    // Create a deep copy of messages
     const compressedMessages = JSON.parse(JSON.stringify(messages)) as Anthropic.MessageParam[];
-
-    // Compress the identified results
     analysisResultIndices.forEach(({ messageIndex, contentIndex, originalSize }) => {
       const message = compressedMessages[messageIndex];
       if (Array.isArray(message.content)) {
         const block = message.content[contentIndex];
         if (block.type === 'tool_result') {
-          // Replace with compressed result
           block.content = JSON.stringify(this.COMPRESSED_RESULT);
           
-          // Calculate token savings (rough estimate: 1 token ≈ 4 chars)
           const newSize = JSON.stringify(this.COMPRESSED_RESULT).length;
           estimatedTokensSaved += Math.ceil((originalSize - newSize) / 4);
           compressedCount++;
@@ -146,30 +114,20 @@ export class AnalysisToolResultManager {
     };
   }
 
-  /**
-   * Check if a tool_result content is from an analysis tool
-   * Analysis tools return large JSON objects with specific structures
-   */
   private static isAnalysisToolResult(content: string | any): boolean {
     try {
       const parsed = typeof content === 'string' ? JSON.parse(content) : content;
       
-      // extract_context returns: { extractedAt, tabId, url, title, dom: {...} }
-      // take_snapshot returns: { success, data: { screenshot: "base64...", ... } }
-      
-      // Check for extract_context signature
       if (parsed.extractedAt && parsed.dom && parsed.url) {
         return true;
       }
       
-      // Check for take_snapshot signature
-      if (parsed.data && (parsed.data.screenshot || parsed.data.snapshot)) {
+      if (parsed.data && parsed.data.snapshot) {
         return true;
       }
       
-      // Check if it's already compressed
       if (parsed.note && parsed.note.includes('compressed')) {
-        return false; // Already compressed, don't compress again
+        return false;
       }
       
       return false;
@@ -178,10 +136,6 @@ export class AnalysisToolResultManager {
     }
   }
 
-  /**
-   * Get statistics about analysis tool usage in messages
-   * Useful for debugging and monitoring
-   */
   public static getAnalysisToolStats(messages: Anthropic.MessageParam[]): {
     totalAnalysisResults: number;
     compressedResults: number;
@@ -204,7 +158,6 @@ export class AnalysisToolResultManager {
               const size = JSON.stringify(block.content).length;
               estimatedTotalTokens += Math.ceil(size / 4);
               
-              // Check if compressed
               try {
                 const parsed = typeof block.content === 'string' 
                   ? JSON.parse(block.content) 
@@ -229,27 +182,5 @@ export class AnalysisToolResultManager {
       fullResults,
       estimatedTotalTokens
     };
-  }
-
-  /**
-   * Log compression statistics for debugging
-   */
-  public static logCompressionStats(
-    messages: Anthropic.MessageParam[],
-    prefix = '📊 [AnalysisToolCompression]'
-  ): void {
-    const stats = this.getAnalysisToolStats(messages);
-    
-    if (stats.totalAnalysisResults > 0) {
-      console.log(`${prefix} Analysis tool results in context:`);
-      console.log(`  - Total: ${stats.totalAnalysisResults}`);
-      console.log(`  - Full: ${stats.fullResults}`);
-      console.log(`  - Compressed: ${stats.compressedResults}`);
-      console.log(`  - Estimated tokens: ${stats.estimatedTotalTokens.toLocaleString()}`);
-      
-      if (stats.fullResults > 1) {
-        console.warn(`⚠️  ${stats.fullResults} full analysis results detected - compression recommended!`);
-      }
-    }
   }
 }

@@ -15,15 +15,12 @@ import { SessionManager } from '@/main/llm/session/SessionManager';
  */
 export class AutomationManager {
   private automationSessions: Map<string, AutomationService> = new Map();
-  private sessionManager: SessionManager;
 
   constructor(
     private recordingStore: RecordingStore,
-    sessionManager: SessionManager,
+    private sessionManager: SessionManager,
     private agentUIView?: WebContentsView
-  ) {
-    this.sessionManager = sessionManager;
-  }
+  ) {}
 
   /**
    * Execute LLM-powered automation on active tab
