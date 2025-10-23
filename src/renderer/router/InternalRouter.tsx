@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { History, Recordings, Profile, SignIn, SignUp, Settings } from '@/renderer/screens';
+import { History, Recordings, Automation, Profile, SignIn, SignUp, Settings } from '@/renderer/screens';
 
 /**
  * Internal page routes configuration
@@ -20,6 +20,11 @@ export const INTERNAL_ROUTES = {
     path: '/recordings',
     component: Recordings,
     title: 'Recordings',
+  },
+  automation: {
+    path: '/automation',
+    component: Automation,
+    title: 'Automation',
   },
   profile: {
     path: '/profile',

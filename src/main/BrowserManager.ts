@@ -223,6 +223,18 @@ export class BrowserManager {
     return this.automationManager.getAutomationSessionHistory(limit);
   }
 
+  public async getAutomationSessions(): Promise<any[]> {
+    return this.automationManager.getAutomationSessions();
+  }
+
+  public async getAutomationSessionDetails(sessionId: string): Promise<any> {
+    return this.automationManager.getAutomationSessionDetails(sessionId);
+  }
+
+  public async resumeAutomationSession(sessionId: string): Promise<any> {
+    return this.automationManager.resumeAutomationSession(sessionId);
+  }
+
   public async deleteAutomationSession(sessionId: string): Promise<boolean> {
     return this.automationManager.deleteAutomationSession(sessionId);
   }

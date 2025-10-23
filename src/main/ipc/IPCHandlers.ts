@@ -369,6 +369,18 @@ export class IPCHandlers {
       return await this.browserManager.getAutomationSessionHistory(limit);
     });
     
+    ipcMain.handle('automation:get-sessions', async () => {
+      return await this.browserManager.getAutomationSessions();
+    });
+    
+    ipcMain.handle('automation:get-session-details', async (_, sessionId: string) => {
+      return await this.browserManager.getAutomationSessionDetails(sessionId);
+    });
+    
+    ipcMain.handle('automation:resume-session', async (_, sessionId: string) => {
+      return await this.browserManager.resumeAutomationSession(sessionId);
+    });
+    
     ipcMain.handle('automation:delete-session', async (_, sessionId: string) => {
       return await this.browserManager.deleteAutomationSession(sessionId);
     });

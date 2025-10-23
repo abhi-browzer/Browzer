@@ -169,6 +169,10 @@ export function NavigationBar({
             <Clock className="w-4 h-4 mr-2" />
             History
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onNavigate('browzer://automation')}>
+            <Clock className="w-4 h-4 mr-2" />
+            Automation
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => onNavigate('browzer://profile')}>
             <User className="w-4 h-4 mr-2" />

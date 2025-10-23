@@ -201,7 +201,7 @@ export class AutomationManager {
   }
 
   /**
-   * Get automation session history
+   * Get automation session history (limited list for sidebar)
    */
   public async getAutomationSessionHistory(limit = 5): Promise<any[]> {
     try {
@@ -220,6 +220,76 @@ export class AutomationManager {
     } catch (error) {
       console.error('[AutomationManager] Failed to load session history:', error);
       return [];
+    }
+  }
+
+  /**
+   * Get all automation sessions (for automation screen)
+   */
+  public async getAutomationSessions(): Promise<any[]> {
+    try {
+      // Get all sessions (no limit)
+      const sessions = this.sessionManager.listSessions(1000, 0);
+      
+      return sessions.map(session => ({
+        sessionId: session.id,
+        userGoal: session.userGoal,
+        recordingId: session.recordingId,
+        status: session.status,
+        createdAt: session.createdAt,
+        updatedAt: session.updatedAt,
+        messageCount: session.messageCount,
+        stepCount: session.stepCount
+      }));
+    } catch (error) {
+      console.error('[AutomationManager] Failed to load sessions:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get detailed session information
+   */
+  public async getAutomationSessionDetails(sessionId: string): Promise<any> {
+    try {
+      const session = this.sessionManager.getSession(sessionId);
+      
+      if (!session) {
+        throw new Error(`Session ${sessionId} not found`);
+      }
+
+      // Return session with all available details
+      return session;
+    } catch (error) {
+      console.error('[AutomationManager] Failed to load session details:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Resume a paused or failed automation session
+   */
+  public async resumeAutomationSession(sessionId: string): Promise<any> {
+    try {
+      // Load the session
+      const session = this.sessionManager.getSession(sessionId);
+      
+      if (!session) {
+        throw new Error(`Session ${sessionId} not found`);
+      }
+
+      // TODO: Implement resume logic
+      // For now, just return the session info
+      console.log('[AutomationManager] Resume session:', sessionId);
+      
+      return {
+        success: true,
+        sessionId,
+        message: 'Session resume not yet implemented'
+      };
+    } catch (error) {
+      console.error('[AutomationManager] Failed to resume session:', error);
+      throw error;
     }
   }
 

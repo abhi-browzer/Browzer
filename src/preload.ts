@@ -96,6 +96,9 @@ export interface BrowserAPI {
   // Session Management
   loadAutomationSession: (sessionId: string) => Promise<any>;
   getAutomationSessionHistory: (limit?: number) => Promise<any[]>;
+  getAutomationSessions: () => Promise<any[]>;
+  getAutomationSessionDetails: (sessionId: string) => Promise<any>;
+  resumeAutomationSession: (sessionId: string) => Promise<any>;
   deleteAutomationSession: (sessionId: string) => Promise<boolean>;
 
   // Event listeners
@@ -263,6 +266,12 @@ const browserAPI: BrowserAPI = {
     ipcRenderer.invoke('automation:load-session', sessionId),
   getAutomationSessionHistory: (limit?: number) =>
     ipcRenderer.invoke('automation:get-session-history', limit),
+  getAutomationSessions: () =>
+    ipcRenderer.invoke('automation:get-sessions'),
+  getAutomationSessionDetails: (sessionId: string) =>
+    ipcRenderer.invoke('automation:get-session-details', sessionId),
+  resumeAutomationSession: (sessionId: string) =>
+    ipcRenderer.invoke('automation:resume-session', sessionId),
   deleteAutomationSession: (sessionId: string) =>
     ipcRenderer.invoke('automation:delete-session', sessionId),
   

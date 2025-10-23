@@ -42,7 +42,7 @@ export class NavigationManager {
   private handleInternalURL(url: string): string {
     const internalPath = url.replace('browzer://', '');
     
-    const validPages = ['settings', 'history', 'recordings', 'profile', 'signin', 'signup'];
+    const validPages = INTERNAL_PAGES.map(page => page.path);
     
     if (validPages.includes(internalPath)) {
       return this.generateInternalPageURL(internalPath);
