@@ -104,7 +104,7 @@ export class IntermediatePlanHandler {
       content: response.content
     });
 
-    this.stateManager.compressAnalysisToolResults();
+    this.stateManager.compressMessages();
 
     // Parse new plan
     const newPlan = AutomationPlanParser.parsePlan(response);
@@ -147,7 +147,7 @@ export class IntermediatePlanHandler {
       content: response.content
     });
 
-    this.stateManager.compressAnalysisToolResults();
+    this.stateManager.compressMessages();
 
     // Parse new plan
     const newPlan = AutomationPlanParser.parsePlan(response);
@@ -210,7 +210,7 @@ export class IntermediatePlanHandler {
       content: response.content
     });
 
-    this.stateManager.compressAnalysisToolResults();
+    this.stateManager.compressMessages();
 
     const newPlan = AutomationPlanParser.parsePlan(response);
 
