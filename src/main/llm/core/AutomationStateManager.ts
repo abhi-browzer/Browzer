@@ -7,6 +7,7 @@ import { SessionManager } from '../session/SessionManager';
 import { MessageBuilder } from '../builders/MessageBuilder';
 import { ContextWindowManager } from '../utils/ContextWindowManager';
 import Anthropic from '@anthropic-ai/sdk';
+import { MessageCompressionManager } from '../utils/MessageCompressionManager';
 
 /**
  * AutomationStateManager - State manager with persistent storage
@@ -400,22 +401,21 @@ export class AutomationStateManager {
   }
 
   /**
-   * Compress analysis tool results in message history
+   * Compress messages to optimize context window
    * 
    * Problem:
-   * - extract_context and take_snapshot return huge JSON payloads (10K-50K+ tokens)
-   * - These accumulate across intermediate plans, exploding context usage
-   * - Only the LATEST analysis result is actually useful to the model
+   * - Large payloads accumulate in message history (analysis results, errors, etc.)
+   * - Context window explodes exponentially, hitting 200K limit quickly
    * 
    * Solution:
-   * - Keep only the most recent analysis result with full data
-   * - Compress all older ones to minimal strings
-   * - Call this AFTER the model receives each new analysis result
+   * - Analysis results: Compress ALL extract_context/take_snapshot results
+   * - Error messages: Keep only the LATEST error, compress all older ones
+   * - Call this AFTER the model receives new content
    * 
    * This can save 50K-200K+ tokens in long-running automations!
    */
-  public compressAnalysisToolResults(): void {
-    const result = MessageBuilder.compressAnalysisToolResults(this.state.messages);
+  public compressMessages(): void {
+    const result = MessageCompressionManager.compressMessages(this.state.messages);
     
     if (result.compressedCount > 0) {
       this.state.messages = result.compressedMessages;

@@ -220,13 +220,13 @@ Your response should contain TWO parts:
 **EXAMPLE STRUCTURE (FINAL):**
 "The user wants to create a GitHub repository named 'my-project'. Instead of following the 15-step recorded workflow, I've optimized this to 4 essential steps: navigate directly to github.com/new, fill the repository name, and submit. This is a FINAL plan since all steps are deterministic."
 
-[Tool call 1: declare_plan_metadata with planType="final" and reasoning]
+[Tool call 1: declare_plan_metadata with planType="final"]
 [Tool call 2-5: The actual automation steps]
 
 **EXAMPLE STRUCTURE (INTERMEDIATE):**
 "The user wants to click the first link, but I need to see what links exist on the current page. This is an INTERMEDIATE plan - I'll navigate to the page and extract context to see available links. Using only ONE analysis tool to stay within token limits."
 
-[Tool call 1: declare_plan_metadata with planType="intermediate" and reasoning]
+[Tool call 1: declare_plan_metadata with planType="intermediate"]
 [Tool call 2: navigate]
 [Tool call 3: wait (2000ms)]
 [Tool call 4: extract_context

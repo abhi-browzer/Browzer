@@ -3,7 +3,6 @@ import Anthropic from '@anthropic-ai/sdk';
 import { ParsedAutomationPlan } from '../parsers/AutomationPlanParser';
 import { ExecutedStep } from '../core/types';
 import { ToolExecutionResult } from '@/shared/types';
-import { AnalysisToolResultManager } from '../utils/AnalysisToolResultManager';
 
 /**
  * MessageBuilder - Builds tool result messages for Claude conversations
@@ -33,17 +32,11 @@ export class MessageBuilder {
   ): Anthropic.Messages.ToolResultBlockParam[] {
     const toolResultBlocks: Anthropic.Messages.ToolResultBlockParam[] = [];
 
-    // CRITICAL: If model called declare_plan_metadata, we MUST return a tool_result for it
     if (plan.metadataToolUseId) {
       toolResultBlocks.push({
         type: 'tool_result',
         tool_use_id: plan.metadataToolUseId,
-        content: JSON.stringify({
-          success: true,
-          message: 'Plan metadata recorded',
-          planType: plan.planType,
-          reasoning: plan.reasoning
-        })
+        content: `recorded planType: ${plan.planType}`
       });
     }
 
@@ -71,14 +64,10 @@ export class MessageBuilder {
         });
       } else {
         // For other tools, simple success message
-        toolResultBlocks.push({
+         toolResultBlocks.push({
           type: 'tool_result',
           tool_use_id: planStep.toolUseId,
-          content: JSON.stringify({
-            success: true,
-            message: `${planStep.toolName} executed successfully`,
-            summary: result.effects?.summary || `Completed ${planStep.toolName}`
-          })
+          content: `✅ ${planStep.toolName} executed successfully`,
         });
       }
     }
@@ -107,17 +96,11 @@ export class MessageBuilder {
       is_error?: boolean;
     }> = [];
 
-    // CRITICAL: If model called declare_plan_metadata, we MUST return a tool_result for it
     if (plan.metadataToolUseId) {
       toolResults.push({
         type: 'tool_result',
         tool_use_id: plan.metadataToolUseId,
-        content: JSON.stringify({
-          success: true,
-          message: 'Plan metadata recorded',
-          planType: plan.planType,
-          reasoning: plan.reasoning
-        })
+        content: `recorded planType: ${plan.planType}`
       });
     }
 
@@ -137,17 +120,11 @@ export class MessageBuilder {
             type: 'tool_result',
             tool_use_id: step.toolUseId,
             content: executedStep.success
-              ? JSON.stringify({
-                  success: true,
-                  message: 'Step completed successfully',
-                  toolName: step.toolName
-                })
+              ? `✅ ${step.toolName} executed successfully`
               : JSON.stringify({
-                  success: false,
-                  error: executedStep.error || executedStep.result?.error?.message || 'Unknown error',
+                  error: executedStep.error || executedStep.result?.error?.message || '❌ Unknown error',
                   toolName: step.toolName
                 }),
-            is_error: !executedStep.success
           });
           executedCount++;
         } else {
@@ -155,12 +132,7 @@ export class MessageBuilder {
           toolResults.push({
             type: 'tool_result',
             tool_use_id: step.toolUseId,
-            content: JSON.stringify({
-              success: false,
-              error: 'Not executed - automation stopped before reaching this step',
-              toolName: step.toolName
-            }),
-            is_error: true
+            content: `❌ Not executed - automation stopped before reaching this step`,
           });
         }
       } else {
@@ -168,12 +140,7 @@ export class MessageBuilder {
         toolResults.push({
           type: 'tool_result',
           tool_use_id: step.toolUseId,
-          content: JSON.stringify({
-            success: false,
-            error: 'Not executed - automation stopped before reaching this step',
-            toolName: step.toolName
-          }),
-          is_error: true
+          content: `❌ Not executed - automation stopped before reaching this step`
         });
       }
     }
@@ -207,9 +174,9 @@ export class MessageBuilder {
       content: JSON.stringify({
         success: result.success,
         message: result.success
-          ? `${toolName} executed successfully`
-          : result.error?.message || 'Execution failed',
-        summary: result.effects?.summary
+          ? `✅ ${toolName} executed successfully`
+          : `❌ ${toolName} execution failed: ${result.error?.message || 'Unknown error'}`,
+        // summary: result.effects?.summary
       })
     };
   }
@@ -243,27 +210,5 @@ export class MessageBuilder {
         }
       ]
     };
-  }
-
-  /**
-   * Compress analysis tool results in messages
-   * 
-   * This should be called AFTER the model has received the latest analysis result.
-   * It keeps ONLY the most recent extract_context/take_snapshot result with full data,
-   * and compresses all older ones to minimal strings.
-   * 
-   * This dramatically reduces context window usage for long-running automations.
-   * 
-   * @param messages - Array of conversation messages
-   * @returns Compressed messages with statistics
-   */
-  public static compressAnalysisToolResults(
-    messages: Anthropic.MessageParam[]
-  ): {
-    compressedMessages: Anthropic.MessageParam[];
-    compressedCount: number;
-    estimatedTokensSaved: number;
-  } {
-    return AnalysisToolResultManager.compressAnalysisResults(messages);
   }
 }

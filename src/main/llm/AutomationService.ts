@@ -146,7 +146,6 @@ export class AutomationService extends EventEmitter {
       if (thinkingText) {
         this.emitProgress('claude_response', {
           message: thinkingText,
-          reasoning: initialPlan.plan.reasoning,
           planType: initialPlan.plan.planType
         });
       }
@@ -156,7 +155,6 @@ export class AutomationService extends EventEmitter {
         plan: initialPlan.plan,
         planType: initialPlan.plan.planType,
         totalSteps: initialPlan.plan.totalSteps,
-        reasoning: initialPlan.plan.reasoning
       });
 
       // Step 2: Execute plan with error recovery loop
@@ -342,14 +340,11 @@ export class AutomationService extends EventEmitter {
     const planType = currentPlan.planType || 'final';
 
     if (planType === 'intermediate') {
-      console.log(`🔄 [IterativeAutomation] Intermediate plan completed - getting next phase from Claude`);
       this.stateManager.completePhase();
       const intermediateContinuationResult = await this.intermediatePlanHandler.handleIntermediatePlanCompletion();
       return intermediateContinuationResult;
     }
 
-    // Final plan completed successfully - we're done!
-    console.log(`✅ [IterativeAutomation] Final plan completed - automation successful!`);
     return { success: true, isComplete: true };
   }
 }

@@ -20,7 +20,6 @@ export interface ParsedAutomationPlan {
   totalSteps: number;
   hasToolCalls: boolean;
   planType: 'intermediate' | 'final'; // Whether this is a partial plan or final plan
-  reasoning?: string; // Why this is intermediate/finalp
   metadataToolUseId?: string; // Tool use ID for declare_plan_metadata (needed for tool_result)
 }
 
@@ -43,7 +42,7 @@ export class AutomationPlanParser {
     const steps: AutomationStep[] = [];
     let analysis = '';
     let stepOrder = 0;
-    let planMetadata: { planType?: 'intermediate' | 'final'; reasoning?: string; expectedNextSteps?: string } | null = null;
+    let planMetadata: { planType?: 'intermediate' | 'final'; } | null = null;
     let metadataToolUseId: string | undefined = undefined;
 
     // Iterate through content blocks
@@ -68,9 +67,7 @@ export class AutomationPlanParser {
     }
 
     // Extract plan type from metadata tool call (robust)
-    // Fallback to detection if metadata tool wasn't called (backward compatibility)
     const planType = planMetadata?.planType || this.detectPlanType(analysis, steps);
-    const reasoning = planMetadata?.reasoning || this.extractPlanReasoning(analysis);
   
 
     return {
@@ -79,7 +76,6 @@ export class AutomationPlanParser {
       totalSteps: steps.length,
       hasToolCalls: steps.length > 0,
       planType,
-      reasoning,
       metadataToolUseId // Include the tool_use_id for tool_result
     };
   }

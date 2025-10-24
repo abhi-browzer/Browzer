@@ -57,7 +57,6 @@ export interface StepExecutionData {
 export interface ClaudeThinkingData {
   message: string;
   thinking?: string;
-  reasoning?: string;
   planType?: 'intermediate' | 'final';
 }
 
@@ -67,8 +66,6 @@ export interface ClaudeThinkingData {
 export interface PlanExecutionData {
   planType: 'intermediate' | 'final';
   totalSteps: number;
-  reasoning?: string;
-  expectedNextSteps?: string;
 }
 
 

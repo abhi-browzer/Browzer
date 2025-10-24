@@ -38,9 +38,7 @@ export const BROWSER_AUTOMATION_TOOLS: Anthropic.Tool[] = [
 - User: "Login to GitHub" → FINAL (complete task in one plan)
 - User: "Navigate and analyze the page" → INTERMEDIATE (need analysis results)
 - User: "Fill form and submit" → FINAL (completes the goal)
-
-**CRITICAL: Call this tool in PARALLEL with your automation tools.**
-Claude can make multiple tool calls in one response - use this capability!`,
+`,
     input_schema: {
       type: 'object',
       properties: {
@@ -49,16 +47,8 @@ Claude can make multiple tool calls in one response - use this capability!`,
           enum: ['intermediate', 'final'],
           description: 'Type of plan: "intermediate" if you need to analyze results before continuing, "final" if this completes the entire goal'
         },
-        reasoning: {
-          type: 'string',
-          description: 'Brief explanation (1-2 sentences) of why you chose this plan type. Example: "This is intermediate because I need to analyze the extracted context before deciding next steps."'
-        },
-        expectedNextSteps: {
-          type: 'string',
-          description: 'Only for intermediate plans: What you expect to do after analyzing results. Example: "After seeing the form fields, I will fill them appropriately."'
-        }
       },
-      required: ['planType', 'reasoning']
+      required: ['planType']
     }
   },
   {
