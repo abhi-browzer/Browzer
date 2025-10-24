@@ -53,13 +53,6 @@ export class IntermediatePlanHandler {
       };
     }
 
-    // Build tool result blocks for ALL steps in the plan
-    const toolResultBlocks = MessageBuilder.buildToolResultsForPlan(
-      currentPlan,
-      this.stateManager.getExecutedSteps()
-    );
-
-    console.log(`Submitting ${toolResultBlocks.length} tool_result blocks`);
 
     // Build continuation prompt
     const lastCompletedPlan = this.stateManager.getLastCompletedPlan();
@@ -79,13 +72,11 @@ export class IntermediatePlanHandler {
       currentUrl: this.getCurrentUrl()
     });
 
-    // Add user message with tool results AND continuation prompt
-    this.stateManager.addMessage(
-      MessageBuilder.buildUserMessageWithToolResultsAndText(
-        toolResultBlocks,
-        continuationPrompt
-      )
-    );
+    // Add user message with continuation prompt only
+    this.stateManager.addMessage({
+      role: 'user',
+      content: continuationPrompt
+    });
 
     // Continue conversation with automation system prompt
     const systemPrompt = SystemPromptBuilder.buildAutomationSystemPrompt();
@@ -180,18 +171,6 @@ export class IntermediatePlanHandler {
       };
     }
 
-    // Build tool_result blocks for ALL steps in the recovery plan
-    const toolResultBlocks = MessageBuilder.buildToolResultsForPlan(
-      currentPlan,
-      this.stateManager.getExecutedSteps()
-    );
-
-    console.log(`Submitting tool_result blocks for recovery plan`);
-
-    // Add tool results to conversation
-    this.stateManager.addMessage(
-      MessageBuilder.buildUserMessageWithToolResults(toolResultBlocks)
-    );
 
     // Continue conversation to get new plan
     const systemPrompt = SystemPromptBuilder.buildErrorRecoverySystemPrompt();

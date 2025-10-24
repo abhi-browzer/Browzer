@@ -367,6 +367,8 @@ export class ActionRecorder {
           if (interactiveTags.includes(tagName)) return true;
           const interactiveRoles = ['button', 'link', 'menuitem', 'tab', 'checkbox', 'radio', 'switch', 'option', 'textbox', 'searchbox', 'combobox'];
           if (role && interactiveRoles.includes(role)) return true;
+          // Check for contenteditable elements (Google Docs, Notion, etc.)
+          if (element.isContentEditable || element.getAttribute('contenteditable') === 'true') return true;
           if (element.onclick || element.hasAttribute('onclick')) return true;
           const style = window.getComputedStyle(element);
           if (style.cursor === 'pointer') return true;
@@ -386,24 +388,112 @@ export class ActionRecorder {
             position: { x: e.clientX, y: e.clientY }
           }));
         }, true);
+        
+        // Smart input recording state
         let inputDebounce = {};
-        document.addEventListener('input', (e) => {
-          const target = e.target;
-          const tagName = target.tagName;
-          const inputType = target.type?.toLowerCase();
-          if (tagName === 'INPUT' || tagName === 'TEXTAREA') {
-            const key = target.id || target.name || getSelector(target);
-            const immediateTypes = ['checkbox', 'radio', 'file', 'range', 'color'];
-            const isImmediate = immediateTypes.includes(inputType);
-            
-            if (isImmediate) {
-              handleInputAction(target);
-            } else {
-              clearTimeout(inputDebounce[key]);
-              inputDebounce[key] = setTimeout(() => {
-                handleInputAction(target);
-              }, 500);
+        let lastRecordedValue = {}; // Track last recorded value to avoid duplicates
+        let activeInputElements = new Set(); // Track elements currently being edited
+        
+        /**
+         * Check if element or its parents are contenteditable (for Google Docs)
+         */
+        function isEditableElement(element) {
+          if (!element) return false;
+          
+          // Check the element itself
+          const tagName = element.tagName;
+          const role = element.getAttribute('role');
+          const isContentEditable = element.isContentEditable || element.getAttribute('contenteditable') === 'true';
+          const isTraditionalInput = tagName === 'INPUT' || tagName === 'TEXTAREA';
+          const isRichTextEditor = isContentEditable || 
+                                   role === 'textbox' || 
+                                   role === 'searchbox' || 
+                                   role === 'combobox';
+          
+          if (isTraditionalInput || isRichTextEditor) {
+            return { element, isTraditionalInput, isRichTextEditor };
+          }
+          
+          // Check parent elements (up to 3 levels) for contenteditable
+          // This fixes Google Docs where input events come from nested spans
+          let current = element.parentElement;
+          let depth = 0;
+          while (current && depth < 3) {
+            if (current.isContentEditable || current.getAttribute('contenteditable') === 'true') {
+              return { element: current, isTraditionalInput: false, isRichTextEditor: true };
             }
+            current = current.parentElement;
+            depth++;
+          }
+          
+          return null;
+        }
+        
+        /**
+         * Record input action with deduplication
+         */
+        function recordInputIfChanged(target, isRichTextEditor) {
+          const key = target.id || target.name || getSelector(target);
+          const currentValue = isRichTextEditor 
+            ? (target.innerText || target.textContent || '').trim()
+            : target.value;
+          
+          // Only record if value actually changed
+          if (lastRecordedValue[key] !== currentValue) {
+            lastRecordedValue[key] = currentValue;
+            handleInputAction(target, isRichTextEditor);
+          }
+        }
+        
+        // Input event: Track changes but use longer debounce (3 seconds)
+        // This is a fallback for very long typing sessions
+        document.addEventListener('input', (e) => {
+          const editableInfo = isEditableElement(e.target);
+          if (!editableInfo) return;
+          
+          const { element: target, isTraditionalInput, isRichTextEditor } = editableInfo;
+          const key = target.id || target.name || getSelector(target);
+          const inputType = target.type?.toLowerCase();
+          const immediateTypes = ['checkbox', 'radio', 'file', 'range', 'color'];
+          const isImmediate = immediateTypes.includes(inputType);
+          
+          // Track that this element is being edited
+          activeInputElements.add(key);
+          
+          if (isImmediate) {
+            // Record immediately for checkboxes, radios, etc.
+            handleInputAction(target);
+          } else {
+            // For text input: Use 3-second debounce as fallback
+            // Primary recording happens on blur event
+            clearTimeout(inputDebounce[key]);
+            inputDebounce[key] = setTimeout(() => {
+              recordInputIfChanged(target, isRichTextEditor);
+            }, 3000); // 3 seconds - only fires if user types continuously
+          }
+        }, true);
+        
+        // Blur event: Record when user leaves the input field (PRIMARY METHOD)
+        // This is the main way we capture completed input
+        document.addEventListener('blur', (e) => {
+          const editableInfo = isEditableElement(e.target);
+          if (!editableInfo) return;
+          
+          const { element: target, isRichTextEditor } = editableInfo;
+          const key = target.id || target.name || getSelector(target);
+          const inputType = target.type?.toLowerCase();
+          const immediateTypes = ['checkbox', 'radio', 'file', 'range', 'color'];
+          
+          // Skip immediate types (already recorded on input)
+          if (immediateTypes.includes(inputType)) return;
+          
+          // Clear any pending debounce
+          clearTimeout(inputDebounce[key]);
+          
+          // Record the final value when user leaves the field
+          if (activeInputElements.has(key)) {
+            recordInputIfChanged(target, isRichTextEditor);
+            activeInputElements.delete(key);
           }
         }, true);
         document.addEventListener('change', (e) => {
@@ -421,16 +511,25 @@ export class ActionRecorder {
             handleFileUploadAction(target);
           }
         }, true);
-        function handleInputAction(target) {
+        function handleInputAction(target, isRichTextEditor = false) {
           const inputType = target.type?.toLowerCase();
           let actionType = 'input';
-          let value = target.value;
+          let value;
           
           if (inputType === 'checkbox') {
             actionType = 'checkbox';
             value = target.checked;
           } else if (inputType === 'radio') {
             actionType = 'radio';
+            value = target.value;
+          } else if (isRichTextEditor) {
+            // For contenteditable and ARIA textbox elements, extract text content
+            // Use innerText for better formatting (respects line breaks, ignores hidden elements)
+            value = target.innerText || target.textContent || '';
+            // Trim and limit length to avoid huge payloads
+            value = value.trim().substring(0, 5000);
+          } else {
+            // Traditional input/textarea
             value = target.value;
           }
           
