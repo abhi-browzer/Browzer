@@ -29,6 +29,9 @@ export function AgentHeader({
   isDisabled,
 }: AgentHeaderProps) {
   const isExistingSession = viewMode === 'existing_session';
+  
+  // Find the selected recording to display only its name in the trigger
+  const selectedRecording = recordings.find(r => r.id === selectedRecordingId);
 
   return (
     <div className="flex items-center justify-between border-b bg-background/50 backdrop-blur-sm px-4 py-2 z-16 sticky top-0">
@@ -38,8 +41,12 @@ export function AgentHeader({
             onValueChange={onRecordingSelect}
             disabled={isDisabled || isExistingSession}
           >
-            <SelectTrigger className='w-64 max-w-xs'>
-              <SelectValue placeholder="Select a recorded session..." />
+            <SelectTrigger className='w-64 max-w-xs h-auto min-h-9'>
+              <SelectValue placeholder="Select a recorded session...">
+                {selectedRecording && (
+                  <span className="truncate block">{selectedRecording.name}</span>
+                )}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent align="start" side="bottom" className="w-96 max-w-screen">
               {recordings.map((recording) => (

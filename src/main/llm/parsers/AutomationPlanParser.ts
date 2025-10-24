@@ -4,7 +4,7 @@ import Anthropic from '@anthropic-ai/sdk';
 /**
  * Parsed automation step from Claude's response
  */
-export interface ParsedAutomationStep {
+export interface AutomationStep {
   toolName: string;
   toolUseId: string;
   input: any;
@@ -15,12 +15,12 @@ export interface ParsedAutomationStep {
  * Result of parsing Claude's automation plan
  */
 export interface ParsedAutomationPlan {
-  steps: ParsedAutomationStep[];
+  steps: AutomationStep[];
   analysis?: string; // Claude's initial analysis/explanation
   totalSteps: number;
   hasToolCalls: boolean;
-  planType?: 'intermediate' | 'final'; // Whether this is a partial plan or final plan
-  reasoning?: string; // Why this is intermediate/final
+  planType: 'intermediate' | 'final'; // Whether this is a partial plan or final plan
+  reasoning?: string; // Why this is intermediate/finalp
   metadataToolUseId?: string; // Tool use ID for declare_plan_metadata (needed for tool_result)
 }
 
@@ -40,7 +40,7 @@ export class AutomationPlanParser {
    * @returns Parsed automation plan with ordered steps
    */
   public static parsePlan(response: Anthropic.Message): ParsedAutomationPlan {
-    const steps: ParsedAutomationStep[] = [];
+    const steps: AutomationStep[] = [];
     let analysis = '';
     let stepOrder = 0;
     let planMetadata: { planType?: 'intermediate' | 'final'; reasoning?: string; expectedNextSteps?: string } | null = null;
@@ -98,7 +98,7 @@ export class AutomationPlanParser {
    */
   private static detectPlanType(
     analysis: string,
-    steps: ParsedAutomationStep[]
+    steps: AutomationStep[]
   ): 'intermediate' | 'final' {
     const analysisLower = analysis.toLowerCase();
     

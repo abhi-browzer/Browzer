@@ -3,7 +3,7 @@ import { EventEmitter } from 'events';
 import { BrowserAutomationExecutor } from '@/main/automation/BrowserAutomationExecutor';
 import { AutomationStateManager } from './AutomationStateManager';
 import { PlanExecutionResult, ExecutedStep } from './types';
-import { ParsedAutomationPlan, ParsedAutomationStep } from '../parsers/AutomationPlanParser';
+import { ParsedAutomationPlan, AutomationStep } from '../parsers/AutomationPlanParser';
 
 /**
  * PlanExecutor - Executes automation plans step-by-step
@@ -42,7 +42,7 @@ export class PlanExecutor {
    * Returns execution result and whether to continue
    */
   public async executeStep(
-    step: ParsedAutomationStep,
+    step: AutomationStep,
     stepNumber: number,
     totalSteps: number
   ): Promise<{
