@@ -64,15 +64,18 @@ export interface ClickabilityResult {
 }
 
 /**
- * Advanced element find result
+ * Advanced element find result with scoring
  */
 export interface AdvancedFindResult {
   success: boolean;
   usedSelector?: string;
-  selectorType?: 'primary' | 'backup';
+  selectorType?: 'primary' | 'backup' | 'text-match' | 'position-match';
   element?: any;
   error?: string;
   details?: string;
+  // NEW: Scoring information
+  matchScore?: number;
+  totalCandidates?: number;
 }
 
 /**

@@ -263,12 +263,156 @@ export class ClickHandler extends BaseHandler {
   }
 
   /**
-   * Perform click with multiple fallback strategies
+   * ENHANCED: Perform click with HYBRID approach (CDP + executeJavaScript)
+   * 
+   * Uses CDP Input.dispatchMouseEvent for native-level clicks that trigger
+   * ALL browser events exactly like a human click, combined with JavaScript
+   * fallbacks for maximum compatibility.
    */
   private async performAdvancedClick(
     selector: string,
     element: any
   ): Promise<ClickExecutionResult> {
+    const attemptedMethods: string[] = [];
+    let lastError = '';
+
+    try {
+      // Strategy 1: CDP Native Mouse Events (MOST REALISTIC)
+      // This triggers actual browser-level mouse events, not just JavaScript events
+      attemptedMethods.push('cdp_mouse_events');
+      
+      const cdpResult = await this.performCDPClick(selector, element);
+      if (cdpResult.success) {
+        console.log('[ClickHandler] ✅ CDP click succeeded');
+        return { success: true, method: 'cdp_mouse_events', attemptedMethods };
+      }
+      lastError = cdpResult.error || 'CDP click failed';
+      console.warn('[ClickHandler] CDP click failed, trying JavaScript fallbacks...');
+      
+    } catch (error) {
+      lastError = `CDP click error: ${error instanceof Error ? error.message : String(error)}`;
+      console.warn('[ClickHandler] CDP click error:', error);
+    }
+
+    // Fallback to JavaScript-based clicks
+    try {
+      const jsResult = await this.performJavaScriptClick(selector);
+      if (jsResult.success) {
+        return { 
+          success: true, 
+          method: jsResult.method, 
+          attemptedMethods: [...attemptedMethods, ...jsResult.attemptedMethods] 
+        };
+      }
+      lastError = jsResult.lastError || jsResult.error || 'All JavaScript click strategies failed';
+      attemptedMethods.push(...jsResult.attemptedMethods);
+      
+    } catch (error) {
+      lastError = `JavaScript click error: ${error instanceof Error ? error.message : String(error)}`;
+    }
+
+    return {
+      success: false,
+      error: 'All click strategies failed',
+      attemptedMethods,
+      lastError
+    };
+  }
+
+  /**
+   * NEW: Perform CDP-based native click
+   * Uses Chrome DevTools Protocol to dispatch actual mouse events at the OS level
+   */
+  private async performCDPClick(selector: string, element: any): Promise<{ success: boolean; error?: string }> {
+    try {
+      // Get element's bounding box for click coordinates
+      const box = element.boundingBox;
+      if (!box || box.width === 0 || box.height === 0) {
+        return { success: false, error: 'Element has no valid bounding box' };
+      }
+
+      // Calculate center point for click
+      const x = box.x + box.width / 2;
+      const y = box.y + box.height / 2;
+
+      // COMPLETE mouse event sequence (exactly like human click)
+      
+      // 1. Mouse move to element (hover)
+      await this.debugger.sendCommand('Input.dispatchMouseEvent', {
+        type: 'mouseMoved',
+        x,
+        y,
+        button: 'none',
+        clickCount: 0
+      });
+
+      await this.sleep(50); // Small delay like human
+
+      // 2. Focus the element (important for form elements)
+      await this.view.webContents.executeJavaScript(`
+        (function() {
+          const el = document.querySelector(${JSON.stringify(selector)});
+          if (el && typeof el.focus === 'function') {
+            el.focus();
+          }
+        })();
+      `);
+
+      await this.sleep(30);
+
+      // 3. Mouse down (press)
+      await this.debugger.sendCommand('Input.dispatchMouseEvent', {
+        type: 'mousePressed',
+        x,
+        y,
+        button: 'left',
+        clickCount: 1
+      });
+
+      await this.sleep(80); // Realistic press duration
+
+      // 4. Mouse up (release)
+      await this.debugger.sendCommand('Input.dispatchMouseEvent', {
+        type: 'mouseReleased',
+        x,
+        y,
+        button: 'left',
+        clickCount: 1
+      });
+
+      // 5. Verify click effect with JavaScript (ensure events fired)
+      const verified = await this.view.webContents.executeJavaScript(`
+        (function() {
+          const el = document.querySelector(${JSON.stringify(selector)});
+          if (!el) return false;
+          
+          // Dispatch additional events for framework compatibility
+          el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 1 }));
+          el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerId: 1 }));
+          el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+          
+          return true;
+        })();
+      `);
+
+      if (!verified) {
+        return { success: false, error: 'Element disappeared during CDP click' };
+      }
+
+      return { success: true };
+
+    } catch (error) {
+      return { 
+        success: false, 
+        error: `CDP click failed: ${error instanceof Error ? error.message : String(error)}` 
+      };
+    }
+  }
+
+  /**
+   * JavaScript-based click with multiple fallback strategies
+   */
+  private async performJavaScriptClick(selector: string): Promise<ClickExecutionResult> {
     const script = `
       (async function() {
         const element = document.querySelector(${JSON.stringify(selector)});
@@ -282,7 +426,45 @@ export class ClickHandler extends BaseHandler {
         element.style.outline = '3px solid #00ff00';
         await new Promise(resolve => setTimeout(resolve, 200));
 
-        // Strategy 1: Native click
+        // Strategy 1: Complete event sequence (modern browsers)
+        try {
+          attemptedMethods.push('complete_event_sequence');
+          
+          const rect = element.getBoundingClientRect();
+          const centerX = rect.left + rect.width / 2;
+          const centerY = rect.top + rect.height / 2;
+
+          // Focus first (important for form elements)
+          if (typeof element.focus === 'function') {
+            element.focus();
+            await new Promise(resolve => setTimeout(resolve, 50));
+          }
+
+          // Pointer events (modern standard)
+          element.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, cancelable: true, pointerId: 1, clientX: centerX, clientY: centerY }));
+          element.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true, cancelable: true, pointerId: 1, clientX: centerX, clientY: centerY }));
+          element.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 1, button: 0, clientX: centerX, clientY: centerY }));
+          
+          // Mouse events (legacy compatibility)
+          element.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window, clientX: centerX, clientY: centerY }));
+          element.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true, cancelable: true, view: window, clientX: centerX, clientY: centerY }));
+          element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window, button: 0, clientX: centerX, clientY: centerY }));
+
+          await new Promise(resolve => setTimeout(resolve, 80)); // Realistic click duration
+
+          element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window, button: 0, clientX: centerX, clientY: centerY }));
+          element.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerId: 1, button: 0, clientX: centerX, clientY: centerY }));
+          element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, button: 0, clientX: centerX, clientY: centerY }));
+          element.dispatchEvent(new PointerEvent('pointerout', { bubbles: true, cancelable: true, pointerId: 1, clientX: centerX, clientY: centerY }));
+
+          element.style.outline = originalOutline;
+          return { success: true, method: 'complete_event_sequence', attemptedMethods };
+        } catch (e) {
+          lastError = 'Complete event sequence failed: ' + e.message;
+          console.warn('[Click] Complete event sequence failed:', e);
+        }
+
+        // Strategy 2: Native click
         try {
           attemptedMethods.push('native_click');
           element.click();
@@ -290,92 +472,9 @@ export class ClickHandler extends BaseHandler {
           return { success: true, method: 'native_click', attemptedMethods };
         } catch (e) {
           lastError = 'Native click failed: ' + e.message;
-          console.warn('[Click] Native click failed:', e);
         }
 
-        // Strategy 2: Dispatch MouseEvent sequence
-        try {
-          attemptedMethods.push('mouse_events');
-          
-          const rect = element.getBoundingClientRect();
-          const centerX = rect.left + rect.width / 2;
-          const centerY = rect.top + rect.height / 2;
-
-          // Full mouse event sequence
-          element.dispatchEvent(new MouseEvent('mouseover', {
-            bubbles: true,
-            cancelable: true,
-            view: window,
-            clientX: centerX,
-            clientY: centerY
-          }));
-          
-          element.dispatchEvent(new MouseEvent('mouseenter', {
-            bubbles: true,
-            cancelable: true,
-            view: window,
-            clientX: centerX,
-            clientY: centerY
-          }));
-
-          element.dispatchEvent(new MouseEvent('mousedown', {
-            bubbles: true,
-            cancelable: true,
-            view: window,
-            button: 0,
-            clientX: centerX,
-            clientY: centerY
-          }));
-
-          await new Promise(resolve => setTimeout(resolve, 50));
-
-          element.dispatchEvent(new MouseEvent('mouseup', {
-            bubbles: true,
-            cancelable: true,
-            view: window,
-            button: 0,
-            clientX: centerX,
-            clientY: centerY
-          }));
-
-          element.dispatchEvent(new MouseEvent('click', {
-            bubbles: true,
-            cancelable: true,
-            view: window,
-            button: 0,
-            clientX: centerX,
-            clientY: centerY
-          }));
-
-          element.style.outline = originalOutline;
-          return { success: true, method: 'mouse_events', attemptedMethods };
-        } catch (e) {
-          lastError = 'Mouse events failed: ' + e.message;
-          console.warn('[Click] Mouse events failed:', e);
-        }
-
-        // Strategy 3: Focus and trigger
-        try {
-          attemptedMethods.push('focus_trigger');
-          
-          if (typeof element.focus === 'function') {
-            element.focus();
-            await new Promise(resolve => setTimeout(resolve, 100));
-          }
-
-          // Dispatch events on focused element
-          element.dispatchEvent(new Event('focus', { bubbles: true }));
-          element.dispatchEvent(new Event('click', { bubbles: true }));
-          element.dispatchEvent(new Event('mouseup', { bubbles: true }));
-
-          element.style.outline = originalOutline;
-          return { success: true, method: 'focus_trigger', attemptedMethods };
-        } catch (e) {
-          lastError = 'Focus trigger failed: ' + e.message;
-          console.warn('[Click] Focus trigger failed:', e);
-        }
-
-        // Strategy 4: For specific element types, use type-specific actions
+        // Strategy 3: For specific element types, use type-specific actions
         try {
           attemptedMethods.push('type_specific');
           
@@ -383,12 +482,10 @@ export class ClickHandler extends BaseHandler {
           const type = element.type?.toLowerCase();
 
           if (tagName === 'a' && element.href) {
-            // For links, trigger navigation
             window.location.href = element.href;
             element.style.outline = originalOutline;
             return { success: true, method: 'type_specific_link', attemptedMethods };
           } else if (tagName === 'button' || (tagName === 'input' && type === 'submit')) {
-            // For buttons/submit, try form submission
             const form = element.closest('form');
             if (form) {
               form.requestSubmit(element);
@@ -396,9 +493,9 @@ export class ClickHandler extends BaseHandler {
               return { success: true, method: 'type_specific_submit', attemptedMethods };
             }
           } else if (tagName === 'input' && (type === 'checkbox' || type === 'radio')) {
-            // For checkboxes/radios, toggle checked
             element.checked = !element.checked;
             element.dispatchEvent(new Event('change', { bubbles: true }));
+            element.dispatchEvent(new Event('input', { bubbles: true }));
             element.style.outline = originalOutline;
             return { success: true, method: 'type_specific_toggle', attemptedMethods };
           }
@@ -411,7 +508,7 @@ export class ClickHandler extends BaseHandler {
         element.style.outline = originalOutline;
         return {
           success: false,
-          error: 'All click strategies failed',
+          error: 'All JavaScript click strategies failed',
           attemptedMethods,
           lastError
         };

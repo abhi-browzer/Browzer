@@ -1,12 +1,15 @@
 
 /**
- * Optimized element target information for recorded actions
- * Aligned with InteractiveElement from context extraction for consistency
+ * ENHANCED element target information for recorded actions
+ * Now includes multiple selector strategies and position info for precise matching
  */
 export interface ElementTarget {
-  // Element identification (single best selector)
+  // Element identification - PRIMARY selector
   selector: string;
   tagName: string;
+  
+  // NEW: Multiple backup selectors for maximum reliability
+  backupSelectors?: string[];
   
   // Semantic information
   text?: string;
@@ -26,6 +29,10 @@ export interface ElementTarget {
   
   // All element attributes (for reliable element identification)
   attributes: Record<string, string>;
+  
+  // NEW: Position information for precise matching
+  elementIndex?: number; // Index among siblings (0-based)
+  siblingCount?: number; // Total number of siblings
 }
 
 export interface RecordedAction {

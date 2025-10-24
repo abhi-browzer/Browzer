@@ -277,8 +277,8 @@ export class ActionRecorder {
         window.__browzerRecorderInstalled = true;
         
         /**
-         * Optimized element extraction - aligned with BrowserContextExtractor
-         * Extracts only essential information with attributes and parentSelector
+         * Element extraction with multiple selector strategies
+         * Generates unique, reliable selectors for precise automation
          */
         function extractElementTarget(element) {
           const rect = element.getBoundingClientRect();
@@ -289,8 +289,12 @@ export class ActionRecorder {
             attributes[attr.name] = attr.value;
           }
           
+          // Generate multiple selector strategies
+          const selectorStrategies = generateMultipleSelectorStrategies(element);
+          
           return {
-            selector: getSelector(element),
+            selector: selectorStrategies.primary,
+            backupSelectors: selectorStrategies.backups,
             tagName: element.tagName,
             text: (element.innerText || element.textContent || '').substring(0, 200).trim() || undefined,
             value: element.value || undefined,
@@ -302,15 +306,91 @@ export class ActionRecorder {
             },
             parentSelector: element.parentElement ? getSelector(element.parentElement) : undefined,
             isDisabled: element.disabled || element.getAttribute('aria-disabled') === 'true' || undefined,
-            attributes: attributes
+            attributes: attributes,
+            // NEW: Position info for precise matching
+            elementIndex: getElementIndex(element),
+            siblingCount: element.parentElement ? element.parentElement.children.length : 0
           };
         }
         
         /**
-         * Generate optimized CSS selector
+         * Generate multiple selector strategies for maximum reliability
+         * Returns primary selector + backup selectors using different approaches
+         */
+        function generateMultipleSelectorStrategies(element) {
+          const strategies = [];
+          
+          // Strategy 1: ID selector (most reliable if available)
+          if (element.id && !element.id.match(/^:r[0-9a-z]+:/)) {
+            strategies.push('#' + CSS.escape(element.id));
+          }
+          
+          // Strategy 2: data-testid or data-* attributes
+          if (element.hasAttribute('data-testid')) {
+            strategies.push('[data-testid="' + element.getAttribute('data-testid') + '"]');
+          }
+          for (const attr of element.attributes) {
+            if (attr.name.startsWith('data-') && attr.name !== 'data-testid' && attr.value) {
+              strategies.push('[' + attr.name + '="' + CSS.escape(attr.value) + '"]');
+              if (strategies.length >= 6) break;
+            }
+          }
+          
+          // Strategy 3: ARIA attributes (accessible and stable)
+          if (element.hasAttribute('aria-label')) {
+            const ariaLabel = element.getAttribute('aria-label');
+            strategies.push('[aria-label="' + CSS.escape(ariaLabel) + '"]');
+            strategies.push(element.tagName.toLowerCase() + '[aria-label="' + CSS.escape(ariaLabel) + '"]');
+          }
+          if (element.hasAttribute('role')) {
+            const role = element.getAttribute('role');
+            strategies.push('[role="' + role + '"]');
+          }
+          
+          // Strategy 4: Name attribute (for form elements)
+          if (element.name) {
+            strategies.push(element.tagName.toLowerCase() + '[name="' + CSS.escape(element.name) + '"]');
+          }
+          
+          // Strategy 5: Type + other attributes combination
+          if (element.type) {
+            strategies.push(element.tagName.toLowerCase() + '[type="' + element.type + '"]');
+          }
+          
+          // Strategy 6: Unique class-based selector with nth-child
+          const uniqueClassSelector = getUniqueClassSelector(element);
+          if (uniqueClassSelector) {
+            strategies.push(uniqueClassSelector);
+          }
+          
+          // Strategy 7: Full path selector (hierarchical)
+          const pathSelector = getPathSelector(element);
+          if (pathSelector) {
+            strategies.push(pathSelector);
+          }
+          
+          // Strategy 8: nth-child based selector (position-based)
+          const nthChildSelector = getNthChildSelector(element);
+          if (nthChildSelector) {
+            strategies.push(nthChildSelector);
+          }
+          
+          // Deduplicate and validate
+          const uniqueStrategies = [...new Set(strategies)].filter(s => s && s.length > 0);
+          
+          return {
+            primary: uniqueStrategies[0] || element.tagName.toLowerCase(),
+            backups: uniqueStrategies.slice(1, 6) // Max 5 backup selectors
+          };
+        }
+        
+        /**
+         * Generate optimized CSS selector (legacy function, still used for parent)
          */
         function getSelector(element) {
-          if (element.id) return '#' + CSS.escape(element.id);
+          if (element.id && !element.id.match(/^:r[0-9a-z]+:/)) {
+            return '#' + CSS.escape(element.id);
+          }
           if (element.hasAttribute('data-testid')) {
             return '[data-testid="' + element.getAttribute('data-testid') + '"]';
           }
@@ -319,7 +399,7 @@ export class ActionRecorder {
           let current = element;
           while (current && current.nodeType === Node.ELEMENT_NODE && path.length < 4) {
             let selector = current.nodeName.toLowerCase();
-            if (current.id) {
+            if (current.id && !current.id.match(/^:r[0-9a-z]+:/)) {
               selector += '#' + CSS.escape(current.id);
               path.unshift(selector);
               break;
@@ -331,8 +411,8 @@ export class ActionRecorder {
             }
             if (current.className && typeof current.className === 'string') {
               const classes = current.className.trim().split(/\\s+/)
-                .filter(c => c && !c.match(/^(ng-|_)/))
-                .slice(0, 2)
+                .filter(c => c && !c.match(/^(ng-|_|css-)/))
+                .slice(0, 3)
                 .map(c => CSS.escape(c))
                 .join('.');
               if (classes) selector += '.' + classes;
@@ -341,6 +421,99 @@ export class ActionRecorder {
             current = current.parentElement;
           }
           return path.join(' > ');
+        }
+        
+        /**
+         * Get unique class-based selector
+         */
+        function getUniqueClassSelector(element) {
+          if (!element.className || typeof element.className !== 'string') return null;
+          
+          const classes = element.className.trim().split(/\\s+/)
+            .filter(c => c && !c.match(/^(ng-|_|css-|active|focus|hover)/));
+          
+          if (classes.length === 0) return null;
+          
+          const tagName = element.tagName.toLowerCase();
+          const classSelector = tagName + '.' + classes.slice(0, 3).map(c => CSS.escape(c)).join('.');
+          
+          // Check if this selector is unique
+          const matches = document.querySelectorAll(classSelector);
+          if (matches.length === 1) {
+            return classSelector;
+          }
+          
+          // If not unique, add nth-of-type
+          const siblings = Array.from(element.parentElement?.children || [])
+            .filter(el => el.tagName === element.tagName);
+          const index = siblings.indexOf(element);
+          if (index >= 0) {
+            return classSelector + ':nth-of-type(' + (index + 1) + ')';
+          }
+          
+          return classSelector;
+        }
+        
+        /**
+         * Get full path selector with smart truncation
+         */
+        function getPathSelector(element) {
+          let path = [];
+          let current = element;
+          let depth = 0;
+          
+          while (current && current.nodeType === Node.ELEMENT_NODE && depth < 5) {
+            let selector = current.nodeName.toLowerCase();
+            
+            // Stop at elements with stable IDs
+            if (current.id && !current.id.match(/^:r[0-9a-z]+:/)) {
+              selector += '#' + CSS.escape(current.id);
+              path.unshift(selector);
+              break;
+            }
+            
+            // Add classes (up to 3)
+            if (current.className && typeof current.className === 'string') {
+              const classes = current.className.trim().split(/\\s+/)
+                .filter(c => c && !c.match(/^(ng-|_|css-|active|focus|hover)/))
+                .slice(0, 2)
+                .map(c => CSS.escape(c))
+                .join('.');
+              if (classes) selector += '.' + classes;
+            }
+            
+            path.unshift(selector);
+            current = current.parentElement;
+            depth++;
+          }
+          
+          return path.join(' > ');
+        }
+        
+        /**
+         * Get nth-child based selector for position-based matching
+         */
+        function getNthChildSelector(element) {
+          if (!element.parentElement) return null;
+          
+          const parent = element.parentElement;
+          const siblings = Array.from(parent.children);
+          const index = siblings.indexOf(element);
+          
+          if (index < 0) return null;
+          
+          const tagName = element.tagName.toLowerCase();
+          const parentSelector = getSelector(parent);
+          
+          return parentSelector + ' > ' + tagName + ':nth-child(' + (index + 1) + ')';
+        }
+        
+        /**
+         * Get element index among all siblings
+         */
+        function getElementIndex(element) {
+          if (!element.parentElement) return 0;
+          return Array.from(element.parentElement.children).indexOf(element);
         }
         
         /**

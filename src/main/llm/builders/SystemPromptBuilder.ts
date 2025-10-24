@@ -109,6 +109,7 @@ When a recorded session is provided (in XML format), use it INTELLIGENTLY:
    - Prioritize: id, name, type, role, aria-label, data-testid
    - Use <parent_selector> for context when needed
    - Build backup selectors from multiple attributes
+   - **CRITICAL**: The recording now includes <backup_selectors> - USE THESE! They're pre-generated with different strategies for maximum reliability
 
 5. **Understand action effects:**
    - Check <effects> to see what changed after each action
@@ -603,6 +604,15 @@ Remember: The automation has already completed ${executedSteps.filter(s => s.suc
         formatted += `    <target_element>\n`;
         formatted += `      <tag>${action.target.tagName}</tag>\n`;
         formatted += `      <selector>${this.escapeXml(action.target.selector)}</selector>\n`;
+        
+        // NEW: Backup selectors for reliability
+        if (action.target.backupSelectors && action.target.backupSelectors.length > 0) {
+          formatted += `      <backup_selectors>\n`;
+          action.target.backupSelectors.forEach((backupSel, idx) => {
+            formatted += `        <backup_${idx + 1}>${this.escapeXml(backupSel)}</backup_${idx + 1}>\n`;
+          });
+          formatted += `      </backup_selectors>\n`;
+        }
         
         // Parent context for hierarchical understanding
         if (action.target.parentSelector) {
