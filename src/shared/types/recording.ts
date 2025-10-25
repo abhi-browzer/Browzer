@@ -53,9 +53,9 @@ export interface RecordedAction {
   snapshotSize?: number; // Snapshot file size in bytes
 
   // Verification metadata (added by ActionRecorder)
-  verified?: boolean;
-  verificationTime?: number;
-  effects?: ClickEffects;
+  // verified?: boolean;
+  // verificationTime?: number;
+  // effects?: ClickEffects;
   
   // LLM-friendly context (optional, can be added during analysis)
   intent?: string; // What the user was trying to do (e.g., "Enter username", "Submit form")

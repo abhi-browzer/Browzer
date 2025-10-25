@@ -21,20 +21,6 @@ export class ActionRecorder {
   private currentTabTitle: string | null = null;
   private currentWebContentsId: number | null = null;
 
-  private recentNetworkRequests: Array<{
-    url: string;
-    method: string;
-    type: string;
-    status?: number;
-    timestamp: number;
-    completed: boolean;
-  }> = [];
-
-  private pendingActions = new Map<string, {
-    action: RecordedAction;
-    timestamp: number;
-    verificationDeadline: number;
-  }>();
 
 
   constructor(view?: WebContentsView) {
@@ -835,39 +821,14 @@ export class ActionRecorder {
           if (firstArg === '[BROWZER_ACTION]') {
             try {
               const actionData = JSON.parse(params.args[1].value);
-              await this.handlePendingAction(actionData);
-              
+              await this.recordAction(actionData);
             } catch (error) {
               console.error('Error parsing action:', error);
             }
           }
         }
         break;
-      case 'Network.requestWillBeSent':
-        this.recentNetworkRequests.push({
-          url: params.request.url,
-          method: params.request.method || 'GET',
-          type: params.type || 'other',
-          timestamp: Date.now(),
-          completed: false
-        });
-        break;
 
-      case 'Network.responseReceived':
-      case 'Network.loadingFinished':
-        const completedReq = this.recentNetworkRequests.find(
-          r => r.url === params.response?.url && !r.completed
-        );
-        if (completedReq) {
-          completedReq.completed = true;
-        }
-        break;
-      case 'Page.lifecycleEvent':
-        if (params.name === 'networkIdle') {
-          console.log('🌐 Network is idle');
-          await this.processPendingActions();
-        }
-        break;
       case 'Page.frameNavigated':
         if (params.frame.parentId === undefined) {
           const newUrl = params.frame.url;
@@ -894,213 +855,48 @@ export class ActionRecorder {
   }
 
   /**
-   * 🆕 Handle pending action (await verification)
+   * Record action immediately as it occurs
    */
-  private async handlePendingAction(actionData: RecordedAction): Promise<void> {
-    const actionId = `${actionData.type}-${actionData.timestamp}`;
-    
-    // Add tab context to action
-    const enrichedAction: RecordedAction = {
-      ...actionData,
-      tabId: this.currentTabId || undefined,
-      tabUrl: this.currentTabUrl || undefined,
-      tabTitle: this.currentTabTitle || undefined,
-      webContentsId: this.currentWebContentsId || undefined
-    };
-    
-    // For keypress and certain actions, verify immediately without waiting
-    const immediateVerificationTypes = ['keypress', 'input', 'checkbox', 'radio', 'select'];
-    const shouldVerifyImmediately = immediateVerificationTypes.includes(actionData.type);
-    
-    if (shouldVerifyImmediately) {
-      // Check if max actions limit reached
-      if (this.actions.length >= ActionRecorder.MAX_ACTIONS) {
-        console.warn(`⚠️ Max actions limit (${ActionRecorder.MAX_ACTIONS}) reached, stopping recording`);
-        if (this.onMaxActionsReached) {
-          this.onMaxActionsReached();
-        }
-        return;
-      }
-      
-      // Verify immediately and record
-      enrichedAction.verified = true;
-      enrichedAction.verificationTime = 0;
-      
-      // Capture snapshot asynchronously (non-blocking)
-      if (this.view) {
-        this.snapshotManager.captureSnapshot(this.view, enrichedAction).then(snapshotPath => {
-          if (snapshotPath) {
-            enrichedAction.snapshotPath = snapshotPath;
-          }
-        }).catch(err => console.error('Snapshot capture failed:', err));
-      }
-      
-      this.actions.push(enrichedAction);
-      console.log(`✅ Action immediately verified: ${actionData.type} (${this.actions.length}/${ActionRecorder.MAX_ACTIONS})`);
-      if (this.onActionCallback) {
-        this.onActionCallback(enrichedAction);
-      }
-      return;
-    }
-    
-    // For other actions (like clicks), use verification with shorter deadline
-    const verificationDeadline = Date.now() + 500; // Reduced from 1000ms to 500ms
-    
-    this.pendingActions.set(actionId, {
-      action: enrichedAction,
-      timestamp: Date.now(),
-      verificationDeadline
-    });
-    
-    setTimeout(async () => {
-      await this.verifyAndFinalizeAction(actionId);
-    }, 500);
-  }
-
-  /**
-   * 🆕 Verify action effects and finalize
-   */
-  private async verifyAndFinalizeAction(actionId: string): Promise<void> {
-    const pending = this.pendingActions.get(actionId);
-    if (!pending) return;
-    
-    // Check if max actions limit reached
+  private async recordAction(actionData: RecordedAction): Promise<void> {
+    // Check max actions limit first
     if (this.actions.length >= ActionRecorder.MAX_ACTIONS) {
       console.warn(`⚠️ Max actions limit (${ActionRecorder.MAX_ACTIONS}) reached, stopping recording`);
-      this.pendingActions.delete(actionId);
       if (this.onMaxActionsReached) {
         this.onMaxActionsReached();
       }
       return;
     }
-    
-    const { action, timestamp } = pending;
-    const preClickState = action.metadata?.preClickState;
-    const effects = await this.detectClickEffects(timestamp, preClickState);
-    const verifiedAction: RecordedAction = {
-      ...action,
-      verified: true,
-      verificationTime: Date.now() - timestamp,
-      effects
+
+    // Enrich action with tab context
+    const enrichedAction: RecordedAction = {
+      ...actionData,
+      tabId: this.currentTabId || undefined,
+      tabUrl: this.currentTabUrl || undefined,
+      tabTitle: this.currentTabTitle || undefined,
+      webContentsId: this.currentWebContentsId || undefined,
     };
     
-    // Capture snapshot asynchronously for verified click actions
+    // Capture snapshot asynchronously (non-blocking)
     if (this.view) {
-      this.snapshotManager.captureSnapshot(this.view, verifiedAction).then(snapshotPath => {
-        if (snapshotPath) {
-          verifiedAction.snapshotPath = snapshotPath;
-        }
-      }).catch(err => console.error('Snapshot capture failed:', err));
-    }
-    
-    this.actions.push(verifiedAction);
-    console.log(`✅ Action verified: ${action.type} (${this.actions.length}/${ActionRecorder.MAX_ACTIONS})`);
-    if (this.onActionCallback) {
-      this.onActionCallback(verifiedAction);
-    }
-    this.pendingActions.delete(actionId);
-  }
-
-  /**
-   * Detect comprehensive click effects
-   */
-  private async detectClickEffects(clickTimestamp: number, preClickState?: any): Promise<any> {
-    const effects: any = {};
-    const effectSummary: string[] = [];
-    const allNetworkActivity = this.recentNetworkRequests.filter(
-      req => req.timestamp >= clickTimestamp && req.timestamp <= clickTimestamp + 1500
-    );
-    const significantRequests = allNetworkActivity.filter(req => 
-      this.isSignificantNetworkRequest(req.url, req.method, req.type)
-    );
-    
-    if (significantRequests.length > 0) {
-      effects.network = {
-        requestCount: significantRequests.length,
-        requests: significantRequests.map(req => ({
-          url: req.url,
-          method: req.method,
-          type: req.type,
-          status: req.status,
-          timing: req.timestamp - clickTimestamp
-        }))
-      };
-      effectSummary.push(`${significantRequests.length} network request(s)`);
-    }
-    try {
-      const pageEffects = await this.debugger.sendCommand('Runtime.evaluate', {
-        expression: `
-          (function() {
-            const effects = {
-              modal: null,
-              focus: null,
-              scroll: null,
-              stateChange: null
-            };
-            const currentState = {
-              url: window.location.href,
-              scrollY: window.scrollY,
-              scrollX: window.scrollX,
-              activeElement: document.activeElement?.tagName,
-              visibleModals: Array.from(document.querySelectorAll('[role="dialog"], [role="alertdialog"], [aria-modal="true"]')).filter(el => {
-                const style = window.getComputedStyle(el);
-                return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
-              }).length
-            };
-            return {
-              currentState: currentState,
-              effects: effects
-            };
-          })();
-        `,
-        returnByValue: true
-      });
-      
-      if (pageEffects.result?.value) {
-        const result = pageEffects.result.value;
-        const currentState = result.currentState;
-        const focused = currentState.activeElement;
-        if (focused && focused !== 'BODY' && focused !== 'HTML') {
-          const meaningfulFocusTags = ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'];
-          if (meaningfulFocusTags.includes(focused)) {
-            effects.focus = {
-              changed: true,
-              newFocusTagName: focused
-            };
-            effectSummary.push('focus changed to ' + focused.toLowerCase());
+      this.snapshotManager.captureSnapshot(this.view, enrichedAction)
+        .then(snapshotPath => {
+          if (snapshotPath) {
+            enrichedAction.snapshotPath = snapshotPath;
           }
-        }
-        const scrollDistance = Math.max(
-          Math.abs(currentState.scrollY),
-          Math.abs(currentState.scrollX)
-        );
-        if (scrollDistance > 200) { // Significant scroll only
-          effects.scroll = {
-            occurred: true,
-            distance: scrollDistance
-          };
-          effectSummary.push('page scrolled');
-        }
-      }
-    } catch (error) {
-      console.error('Error detecting page effects:', error);
+        })
+        .catch(err => console.error('Snapshot capture failed:', err));
     }
-    effects.summary = effectSummary.length > 0 
-      ? effectSummary.join(', ')
-      : 'no significant effects detected';
     
-    return effects;
+    // Record action immediately
+    this.actions.push(enrichedAction);
+    console.log(`✅ Action recorded: ${actionData.type} (${this.actions.length}/${ActionRecorder.MAX_ACTIONS})`);
+    
+    // Notify callback
+    if (this.onActionCallback) {
+      this.onActionCallback(enrichedAction);
+    }
   }
 
-  /**
-   * 🆕 Process all pending actions (called on networkIdle)
-   */
-  private async processPendingActions(): Promise<void> {
-    const pending = Array.from(this.pendingActions.keys());
-    for (const actionId of pending) {
-      await this.verifyAndFinalizeAction(actionId);
-    }
-  }
 
 
   /**
@@ -1119,55 +915,6 @@ export class ActionRecorder {
 
     return !ignorePatterns.some(pattern => url.startsWith(pattern) || url.includes(pattern));
   }
-
-  /**
-   * Filter: Check if network request is significant (not analytics/tracking/ping)
-   */
-  private isSignificantNetworkRequest(url: string, method: string, type: string): boolean {
-    if (type === 'Ping' || type === 'ping' || type === 'beacon') {
-      return false;
-    }
-    const ignorePatterns = [
-      '/gen_204',           // Google analytics
-      '/collect',           // Google Analytics
-      '/analytics',
-      '/tracking',
-      '/track',
-      '/beacon',
-      '/ping',
-      '/log',
-      '/telemetry',
-      'google-analytics.com',
-      'googletagmanager.com',
-      'doubleclick.net',
-      'facebook.com/tr',
-      'mixpanel.com',
-      'segment.com',
-      'amplitude.com',
-      'hotjar.com',
-      '/pixel',
-      '/impression',
-      'clarity.ms',
-      'bing.com/api/log'
-    ];
-    
-    if (ignorePatterns.some(pattern => url.includes(pattern))) {
-      return false;
-    }
-    if (type === 'Document') {
-      return true;
-    }
-    if (type === 'XHR' || type === 'Fetch') {
-      const apiPatterns = ['/api/', '/v1/', '/v2/', '/graphql', '/rest/', '/data/'];
-      const isApiCall = apiPatterns.some(pattern => url.includes(pattern));
-      const isStateChanging = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method.toUpperCase());
-      
-      return isApiCall || isStateChanging;
-    }
-    
-    return false;
-  }
-
 
 
   /**
@@ -1191,8 +938,6 @@ export class ActionRecorder {
       tabUrl: this.currentTabUrl || undefined,
       tabTitle: this.currentTabTitle || undefined,
       webContentsId: this.currentWebContentsId || undefined,
-      verified: true, // Navigation is always verified
-      verificationTime: 0,
     };
 
     this.actions.push(action);

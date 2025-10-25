@@ -70,16 +70,14 @@ export class RecordingManager {
       // Set up centralized recorder with current tab
       this.centralRecorder.setView(activeTab.view);
       this.centralRecorder.setActionCallback((action) => {
-        if (action.verified) {
-          // Update action count for the tab
-          const tabInfo = this.recordingTabs.get(action.tabId || activeTab.id || '');
-          if (tabInfo) {
-            tabInfo.actionCount++;
-          }
-          
-          if (this.agentUIView && !this.agentUIView.webContents.isDestroyed()) {
-            this.agentUIView.webContents.send('recording:action-captured', action);
-          }
+        // Update action count for the tab
+        const tabInfo = this.recordingTabs.get(action.tabId || activeTab.id || '');
+        if (tabInfo) {
+          tabInfo.actionCount++;
+        }
+        
+        if (this.agentUIView && !this.agentUIView.webContents.isDestroyed()) {
+          this.agentUIView.webContents.send('recording:action-captured', action);
         }
       });
       
@@ -295,9 +293,7 @@ export class RecordingManager {
         metadata: {
           fromTabId: previousTabId,
           toTabId: newTab.id,
-        },
-        verified: true,
-        verificationTime: 0
+        }
       };
       
       // Add to actions through the recorder
