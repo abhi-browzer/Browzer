@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Input } from '../../ui/input';
-import { Textarea } from '../../ui/textarea';
-import { Button } from '../../ui/button';
-import { Label } from '../../ui/label';
+import { Input } from '@/renderer/ui/input';
+import { Textarea } from '@/renderer/ui/textarea';
+import { Button } from '@/renderer/ui/button';
+import { Label } from '@/renderer/ui/label';
 import { toast } from 'sonner';
 
 interface SaveRecordingFormProps {

@@ -4,6 +4,7 @@ import { BrowserAutomationExecutor } from '@/main/automation/BrowserAutomationEx
 import { AutomationStateManager } from './AutomationStateManager';
 import { PlanExecutionResult, ExecutedStep } from './types';
 import { ParsedAutomationPlan, AutomationStep } from '../parsers/AutomationPlanParser';
+import { MAX_AUTOMATION_STEPS } from '@/shared/constants/limits';
 
 /**
  * PlanExecutor - Executes automation plans step-by-step
@@ -23,6 +24,7 @@ import { ParsedAutomationPlan, AutomationStep } from '../parsers/AutomationPlanP
  * - Step tracking
  */
 export class PlanExecutor {
+  private static readonly MAX_STEPS = MAX_AUTOMATION_STEPS;
   private executor: BrowserAutomationExecutor;
   private stateManager: AutomationStateManager;
   private eventEmitter?: EventEmitter;
@@ -51,7 +53,32 @@ export class PlanExecutor {
     isAnalysisTool: boolean;
     result?: any;
     error?: string;
+    maxStepsReached?: boolean;
   }> {
+    // Check if max steps limit reached
+    const totalExecutedSteps = this.stateManager.getTotalStepsExecuted();
+    if (totalExecutedSteps >= PlanExecutor.MAX_STEPS) {
+      console.warn(`⚠️ Max steps limit (${PlanExecutor.MAX_STEPS}) reached, stopping automation`);
+      
+      this.eventEmitter?.emit('progress', {
+        type: 'automation_complete',
+        data: {
+          success: false,
+          reason: 'max_steps_reached',
+          message: `Maximum ${PlanExecutor.MAX_STEPS} execution steps reached`,
+          totalSteps: totalExecutedSteps
+        },
+        timestamp: Date.now()
+      });
+      
+      return {
+        success: false,
+        shouldContinue: false,
+        isAnalysisTool: false,
+        maxStepsReached: true,
+        error: `Maximum execution steps limit (${PlanExecutor.MAX_STEPS}) reached`
+      };
+    }
 
     // Emit step start event
     this.eventEmitter.emit('progress', {

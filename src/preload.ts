@@ -108,6 +108,7 @@ export interface BrowserAPI {
   onRecordingStopped: (callback: (data: { actions: any[]; duration: number; startUrl: string }) => void) => () => void;
   onRecordingSaved: (callback: (session: any) => void) => () => void;
   onRecordingDeleted: (callback: (id: string) => void) => () => void;
+  onRecordingMaxActionsReached: (callback: () => void) => () => void;
   
   // Automation event listeners
   onAutomationProgress: (callback: (data: { sessionId: string; event: any }) => void) => () => void;
@@ -185,6 +186,12 @@ const browserAPI: BrowserAPI = {
     const subscription = (_event: Electron.IpcRendererEvent, id: string) => callback(id);
     ipcRenderer.on('recording:deleted', subscription);
     return () => ipcRenderer.removeListener('recording:deleted', subscription);
+  },
+
+  onRecordingMaxActionsReached: (callback) => {
+    const subscription = () => callback();
+    ipcRenderer.on('recording:max-actions-reached', subscription);
+    return () => ipcRenderer.removeListener('recording:max-actions-reached', subscription);
   },
 
   // Settings API

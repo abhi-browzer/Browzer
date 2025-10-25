@@ -68,6 +68,18 @@ export function RecordingView() {
       setActions([]);
       loadSessions();
     });
+
+    const unsubMaxActions = window.browserAPI.onRecordingMaxActionsReached(async () => {
+      console.log('Max actions limit reached, auto-stopping recording');
+      toast.warning('Maximum 150 actions recorded. Stopping recording automatically.');
+      // Stop recording and get the data
+      const data = await window.browserAPI.stopRecording();
+      setIsRecording(false);
+      setRecordingData(data);
+      if (data.actions && data.actions.length > 0) {
+        setShowSaveForm(true);
+      }
+    });
     
     return () => {
       unsubStart();
@@ -75,6 +87,7 @@ export function RecordingView() {
       unsubAction();
       unsubSaved();
       unsubDeleted();
+      unsubMaxActions();
     };
   }, []);
 
