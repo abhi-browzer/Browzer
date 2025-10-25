@@ -133,7 +133,7 @@ When a recorded session is provided (in XML format), use it INTELLIGENTLY:
 **CRITICAL SELECTOR RULES:**
 - NEVER use Playwright syntax like :has-text(), :visible, :enabled - use pure CSS only
 - NEVER use jQuery syntax like :contains(), :has() - use pure CSS only
-- ALWAYS provide backupSelectors (minimum 2-3)
+- ALWAYS provide as many backupSelectors as possible (minimum 2-3)
 - Use attribute selectors for React apps: input[aria-describedby*="username"]
 - Check the recorded session for actual element attributes
 - Elements will be automatically scrolled into view before clicking
@@ -667,31 +667,6 @@ Remember: The automation has already completed ${executedSteps.filter(s => s.suc
       // Click position (for reference)
       if (action.position) {
         formatted += `    <click_position x="${action.position.x}" y="${action.position.y}" />\n`;
-      }
-      
-      // Effects (what changed after this action)
-      if (action.effects) {
-        const effects = [];
-        
-        if (action.effects.navigation?.occurred) {
-          effects.push(`navigated to ${action.effects.navigation.url}`);
-        }
-        if (action.effects.modal?.appeared) {
-          effects.push(`modal appeared`);
-        }
-        if (action.effects.focus?.changed) {
-          effects.push(`focus changed to ${action.effects.focus.newFocusTagName}`);
-        }
-        if (action.effects.network?.requestCount > 0) {
-          effects.push(`${action.effects.network.requestCount} network request(s)`);
-        }
-        if (action.effects.dom?.addedNodes && action.effects.dom.addedNodes > 0) {
-          effects.push(`${action.effects.dom.addedNodes} elements added`);
-        }
-        
-        if (effects.length > 0) {
-          formatted += `    <effects>${effects.join(', ')}</effects>\n`;
-        }
       }
       
       formatted += `  </action>\n\n`;

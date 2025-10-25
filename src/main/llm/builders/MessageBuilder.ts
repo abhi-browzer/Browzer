@@ -176,7 +176,6 @@ export class MessageBuilder {
         message: result.success
           ? `✅ ${toolName} executed successfully`
           : `❌ ${toolName} execution failed: ${result.error?.message || 'Unknown error'}`,
-        // summary: result.effects?.summary
       })
     };
   }
