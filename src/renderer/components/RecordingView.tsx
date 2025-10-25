@@ -5,7 +5,6 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/renderer/ui/tabs';
 import { LiveRecordingView, SessionsListView } from './recording';
 import { toast } from 'sonner';
 import { cn } from '@/renderer/lib/utils';
-import AgentView from './AgentView';
 
 export function RecordingView() {
   const [recordingTab, setRecordingTab] = useState('live');
@@ -69,6 +68,18 @@ export function RecordingView() {
       setActions([]);
       loadSessions();
     });
+
+    const unsubMaxActions = window.browserAPI.onRecordingMaxActionsReached(async () => {
+      console.log('Max actions limit reached, auto-stopping recording');
+      toast.warning('Maximum 150 actions recorded. Stopping recording automatically.');
+      // Stop recording and get the data
+      const data = await window.browserAPI.stopRecording();
+      setIsRecording(false);
+      setRecordingData(data);
+      if (data.actions && data.actions.length > 0) {
+        setShowSaveForm(true);
+      }
+    });
     
     return () => {
       unsubStart();
@@ -76,6 +87,7 @@ export function RecordingView() {
       unsubAction();
       unsubSaved();
       unsubDeleted();
+      unsubMaxActions();
     };
   }, []);
 
@@ -117,12 +129,6 @@ export function RecordingView() {
           <Circle className={cn('size-3 rounded-full bg-red-300', isRecording && 'bg-red-600 animate-pulse')} />
           Live
         </TabsTrigger>
-         <TabsTrigger 
-          value="automation" 
-        >
-          <SparkleIcon className='size-3 text-primary' />
-          Automation
-        </TabsTrigger>
         <TabsTrigger 
           value="sessions"
         >
@@ -140,10 +146,6 @@ export function RecordingView() {
           onSave={handleSaveRecording}
           onDiscard={handleDiscardRecording}
         />
-      </TabsContent>
-
-      <TabsContent value="automation">
-        <AgentView />
       </TabsContent>
 
       <TabsContent value="sessions" className="flex-1 m-0 p-0">

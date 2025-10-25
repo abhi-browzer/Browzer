@@ -107,6 +107,24 @@ export function Recordings() {
     }
   };
 
+  const handleExport = async (id: string) => {
+    try {
+      const result = await window.browserAPI.exportRecording(id);
+      
+      if (result.success && result.filePath) {
+        toast.success(`Recording exported to ${result.filePath}`);
+      } else if (result.cancelled) {
+        // User cancelled the save dialog, no need to show error
+        return;
+      } else {
+        toast.error(result.error || 'Failed to export recording');
+      }
+    } catch (error) {
+      console.error('Failed to export recording:', error);
+      toast.error('Failed to export recording');
+    }
+  };
+
   const getTotalStats = () => {
     const totalActions = recordings.reduce((sum, rec) => sum + rec.actionCount, 0);
     const totalDuration = recordings.reduce((sum, rec) => sum + rec.duration, 0);
@@ -197,6 +215,7 @@ export function Recordings() {
                 onPlay={handlePlay}
                 onDelete={handleDelete}
                 onOpenVideo={handleOpenVideo}
+                onExport={handleExport}
               />
             ))}
           </div>
@@ -210,6 +229,7 @@ export function Recordings() {
         open={isPlayDialogOpen}
         onOpenChange={setIsPlayDialogOpen}
         onOpenVideo={handleOpenVideo}
+        onExport={handleExport}
       />
     </div>
   );

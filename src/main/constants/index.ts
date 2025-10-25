@@ -18,6 +18,10 @@ export const INTERNAL_PAGES: InternalPage[] = [
         path: 'recordings',
     },
     {
+        title: 'Automation',
+        path: 'automation',
+    },
+    {
         title: 'Profile',
         path: 'profile',
     },

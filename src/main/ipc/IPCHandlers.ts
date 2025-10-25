@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { ipcMain, shell } from 'electron';
 import { BrowserManager } from '@/main/BrowserManager';
 import { LayoutManager } from '@/main/window/LayoutManager';
@@ -5,8 +6,7 @@ import { WindowManager } from '@/main/window/WindowManager';
 import { SettingsStore } from '@/main/settings/SettingsStore';
 import { UserService } from '@/main/user/UserService';
 import { PasswordManager } from '@/main/password/PasswordManager';
-import { AutomationService } from '@/main/automation';
-import { RecordedAction, HistoryQuery, LLMAutomationRequest, AppSettings } from '@/shared/types';
+import { RecordedAction, HistoryQuery, AppSettings } from '@/shared/types';
 
 /**
  * IPCHandlers - Centralized IPC communication setup
@@ -16,7 +16,6 @@ export class IPCHandlers {
   private settingsStore: SettingsStore;
   private userService: UserService;
   private passwordManager: PasswordManager;
-  private automationService: AutomationService;
 
   constructor(
     private browserManager: BrowserManager,
@@ -27,7 +26,6 @@ export class IPCHandlers {
     this.userService = new UserService();
     // Use the existing PasswordManager from BrowserManager instead of creating a new one
     this.passwordManager = this.browserManager.getPasswordManager();
-    this.automationService = new AutomationService();
     this.setupHandlers();
 
     console.log('IPCHandlers initialized');
@@ -120,7 +118,7 @@ export class IPCHandlers {
 
     // Get all recordings
     ipcMain.handle('browser:get-all-recordings', async () => {
-      return this.browserManager.getAllRecordings();
+      return this.browserManager.getRecordingStore().getAllRecordings();
     });
 
     // Delete recording
@@ -136,6 +134,11 @@ export class IPCHandlers {
     // Get recorded actions
     ipcMain.handle('browser:get-recorded-actions', async () => {
       return this.browserManager.getRecordedActions();
+    });
+
+    // Export recording as JSON
+    ipcMain.handle('browser:export-recording', async (_, id: string) => {
+      return await this.browserManager.getRecordingStore().exportRecording(id);
     });
     
     // Video file operations
@@ -154,7 +157,7 @@ export class IPCHandlers {
         return `video-file://${encodeURIComponent(videoPath)}`;
       } catch (error) {
         console.error('Failed to get video file URL:', error);
-        throw error;
+        return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
       }
     });
   }
@@ -316,78 +319,70 @@ export class IPCHandlers {
     });
   }
 
+   private setupPasswordHandlers(): void {
+    // Save password
+    ipcMain.handle('password:save', async (_, origin: string, username: string, password: string) => {
+      return this.passwordManager.saveCredential(origin, username, password);
+    });
+
+    // Get credentials for origin
+    ipcMain.handle('password:get-for-origin', async (_, origin: string) => {
+      return this.passwordManager.getCredentialsForOrigin(origin);
+    });
+
+    // Get decrypted password
+    ipcMain.handle('password:get-password', async (_, credentialId: string) => {
+      return this.passwordManager.getPassword(credentialId);
+    });
+
+    // Delete credential
+    ipcMain.handle('password:delete', async (_, credentialId: string) => {
+      return this.passwordManager.deleteCredential(credentialId);
+    });
+
+    // Add to blacklist
+    ipcMain.handle('password:add-to-blacklist', async (_, origin: string) => {
+      this.passwordManager.addToBlacklist(origin);
+      return true;
+    });
+
+    // Check if blacklisted
+    ipcMain.handle('password:is-blacklisted', async (_, origin: string) => {
+      return this.passwordManager.isBlacklisted(origin);
+    });
+  }
+
+  /**
+   * Automation test handlers
+   */
   private setupAutomationHandlers(): void {
-    // Initialize automation service with API key
-    ipcMain.handle('automation:initialize', async (_, apiKey: string) => {
-      try {
-        this.automationService.initialize(apiKey);
-        return { success: true };
-      } catch (error) {
-        console.error('[IPC] Failed to initialize automation:', error);
-        return { success: false, error: (error as Error).message };
-      }
+    ipcMain.handle('automation:execute-llm', async (_, userGoal: string, recordedSessionId: string) => {
+     return await this.browserManager.executeIterativeAutomation(userGoal, recordedSessionId);
     });
-
-    // Execute automation
-    ipcMain.handle('automation:execute', async (_, request: LLMAutomationRequest) => {
-      try {
-        const automation = this.browserManager.getActiveAutomation();
-        if (!automation) {
-          return {
-            success: false,
-            error: 'No active tab for automation'
-          };
-        }
-
-        const result = await this.automationService.executeAutomation(
-          request,
-          automation,
-          (step, index, total) => {
-            // Send progress updates to renderer
-            const agentUIView = this.windowManager.getAgentUIView();
-            if (agentUIView && !agentUIView.webContents.isDestroyed()) {
-              agentUIView.webContents.send('automation:progress', {
-                step,
-                index,
-                total
-              });
-            }
-          }
-        );
-
-        return result;
-      } catch (error) {
-        console.error('[IPC] Automation execution failed:', error);
-        return {
-          success: false,
-          error: (error as Error).message
-        };
-      }
+    
+    // Session management handlers
+    ipcMain.handle('automation:load-session', async (_, sessionId: string) => {
+      return await this.browserManager.loadAutomationSession(sessionId);
     });
-
-    // Generate plan only (without executing)
-    ipcMain.handle('automation:generate-plan', async (_, userPrompt: string, recordingSession: any) => {
-      try {
-        const result = await this.automationService.generatePlan(userPrompt, recordingSession);
-        return result;
-      } catch (error) {
-        console.error('[IPC] Plan generation failed:', error);
-        return {
-          success: false,
-          error: (error as Error).message
-        };
-      }
+    
+    ipcMain.handle('automation:get-session-history', async (_, limit?: number) => {
+      return await this.browserManager.getAutomationSessionHistory(limit);
     });
-
-    // Get automation status
-    ipcMain.handle('automation:get-status', async () => {
-      return this.automationService.getStatus();
+    
+    ipcMain.handle('automation:get-sessions', async () => {
+      return await this.browserManager.getAutomationSessions();
     });
-
-    // Cancel automation
-    ipcMain.handle('automation:cancel', async () => {
-      this.automationService.cancel();
-      return { success: true };
+    
+    ipcMain.handle('automation:get-session-details', async (_, sessionId: string) => {
+      return await this.browserManager.getAutomationSessionDetails(sessionId);
+    });
+    
+    ipcMain.handle('automation:resume-session', async (_, sessionId: string) => {
+      return await this.browserManager.resumeAutomationSession(sessionId);
+    });
+    
+    ipcMain.handle('automation:delete-session', async (_, sessionId: string) => {
+      return await this.browserManager.deleteAutomationSession(sessionId);
     });
   }
 
@@ -411,6 +406,7 @@ export class IPCHandlers {
     ipcMain.removeAllListeners('browser:delete-recording');
     ipcMain.removeAllListeners('browser:is-recording');
     ipcMain.removeAllListeners('browser:get-recorded-actions');
+    ipcMain.removeAllListeners('browser:export-recording');
     ipcMain.removeAllListeners('settings:get-all');
     ipcMain.removeAllListeners('settings:get-category');
     ipcMain.removeAllListeners('settings:update');
@@ -457,38 +453,5 @@ export class IPCHandlers {
     ipcMain.removeAllListeners('automation:generate-plan');
     ipcMain.removeAllListeners('automation:get-status');
     ipcMain.removeAllListeners('automation:cancel');
-  }
-
-  private setupPasswordHandlers(): void {
-    // Save password
-    ipcMain.handle('password:save', async (_, origin: string, username: string, password: string) => {
-      return this.passwordManager.saveCredential(origin, username, password);
-    });
-
-    // Get credentials for origin
-    ipcMain.handle('password:get-for-origin', async (_, origin: string) => {
-      return this.passwordManager.getCredentialsForOrigin(origin);
-    });
-
-    // Get decrypted password
-    ipcMain.handle('password:get-password', async (_, credentialId: string) => {
-      return this.passwordManager.getPassword(credentialId);
-    });
-
-    // Delete credential
-    ipcMain.handle('password:delete', async (_, credentialId: string) => {
-      return this.passwordManager.deleteCredential(credentialId);
-    });
-
-    // Add to blacklist
-    ipcMain.handle('password:add-to-blacklist', async (_, origin: string) => {
-      this.passwordManager.addToBlacklist(origin);
-      return true;
-    });
-
-    // Check if blacklisted
-    ipcMain.handle('password:is-blacklisted', async (_, origin: string) => {
-      return this.passwordManager.isBlacklisted(origin);
-    });
   }
 }

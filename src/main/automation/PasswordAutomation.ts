@@ -67,13 +67,6 @@ export class PasswordAutomation {
     try {
       console.log('[PasswordAutomation] Starting CDP-based password automation');
       
-      // Attach debugger if not already attached
-      if (!this.debugger.isAttached()) {
-        this.debugger.attach('1.3');
-      }
-      
-      // Enable required CDP domains
-      await this.enableCDPDomains();
       
       // Set up event listeners
       this.setupEventListeners();
@@ -113,19 +106,6 @@ export class PasswordAutomation {
     }
   }
 
-  /**
-   * Enable required CDP domains
-   */
-  private async enableCDPDomains(): Promise<void> {
-    await this.debugger.sendCommand('DOM.enable');
-    await this.debugger.sendCommand('Page.enable');
-    await this.debugger.sendCommand('Runtime.enable');
-    
-    // Get initial document
-    await this.debugger.sendCommand('DOM.getDocument', { depth: -1 });
-    
-    console.log('✅ CDP domains enabled for password automation');
-  }
 
   /**
    * Set up CDP event listeners
@@ -145,10 +125,6 @@ export class PasswordAutomation {
           break;
       }
     });
-
-    // Enable console API to capture form submissions
-    this.debugger.sendCommand('Runtime.enable');
-    this.debugger.sendCommand('Console.enable');
   }
 
   /**

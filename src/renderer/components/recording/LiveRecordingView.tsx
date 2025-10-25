@@ -1,10 +1,10 @@
 import { Play } from 'lucide-react';
-import { Badge } from '../../ui/badge';
-import { ItemGroup } from '../../ui/item';
-import { RecordedAction } from '../../../shared/types';
+import { Badge } from '@/renderer/ui/badge';
+import { ItemGroup } from '@/renderer/ui/item';
+import { RecordedAction } from '@/shared/types';
+import { MAX_RECORDING_ACTIONS } from '@/shared/constants/limits';
 import { SaveRecordingForm } from './SaveRecordingForm';
 import { ActionItem } from './ActionItem';
-import { Label } from '../../ui/label';
 
 interface LiveRecordingViewProps {
   actions: RecordedAction[];
@@ -45,8 +45,16 @@ export function LiveRecordingView({
             </>
           )}
         </div>
-        <Badge className="text-xs">
-          {actions.length} {actions.length === 1 ? 'action' : 'actions'}
+        <Badge 
+          className={`text-xs ${
+            actions.length >= MAX_RECORDING_ACTIONS 
+              ? 'bg-red-500/20 text-red-400 border-red-500/50' 
+              : actions.length >= MAX_RECORDING_ACTIONS - 20 
+              ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/50' 
+              : ''
+          }`}
+        >
+          {actions.length}/{MAX_RECORDING_ACTIONS} {actions.length === 1 ? 'action' : 'actions'}
         </Badge>
       </div>
 

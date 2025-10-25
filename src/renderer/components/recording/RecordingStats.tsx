@@ -24,28 +24,28 @@ export function RecordingStats({
         icon={<Video className="w-5 h-5 text-blue-600" />}
         label="Total Recordings"
         value={total.toString()}
-        bgColor="bg-blue-100 dark:bg-blue-900/30"
+        bgColor="bg-blue-100"
       />
 
       <StatCard
         icon={<MousePointerClick className="w-5 h-5 text-green-600" />}
         label="Total Actions"
         value={totalActions.toString()}
-        bgColor="bg-green-100 dark:bg-green-900/30"
+        bgColor="bg-green-100"
       />
 
       <StatCard
         icon={<Clock className="w-5 h-5 text-purple-600" />}
         label="Total Duration"
         value={formatDuration(totalDuration)}
-        bgColor="bg-purple-100 dark:bg-purple-900/30"
+        bgColor="bg-purple-100"
       />
 
       <StatCard
         icon={<HardDrive className="w-5 h-5 text-orange-600" />}
         label="Storage Used"
         value={formatFileSize(totalStorageSize)}
-        bgColor="bg-orange-100 dark:bg-orange-900/30"
+        bgColor="bg-orange-100"
         subtitle={totalSnapshotSize > 0 ? `${formatFileSize(totalSnapshotSize)} snapshots` : undefined}
       />
     </div>
@@ -62,7 +62,7 @@ interface StatCardProps {
 
 function StatCard({ icon, label, value, bgColor, subtitle }: StatCardProps) {
   return (
-    <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-4 shadow-sm">
+    <div className="rounded-xl border p-4 shadow-sm bg-white dark:bg-black">
       <div className="flex items-center gap-3">
         <div className={`p-2 ${bgColor} rounded-lg`}>
           {icon}

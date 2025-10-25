@@ -10,7 +10,6 @@
       "runtimeArgs": ["start", "--", "--inspect=9229"],
       "env": {
         "NODE_ENV": "development",
-        "ELECTRON_ENABLE_LOGGING": "1"
       },
       "outputCapture": "std",
       "console": "integratedTerminal",

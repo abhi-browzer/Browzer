@@ -2,14 +2,17 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { WebContentsView } from "electron";
 import { RecordedAction } from '@/shared/types';
+import { MAX_RECORDING_ACTIONS } from '@/shared/constants/limits';
 import { SnapshotManager } from './SnapshotManager';
 
 export class ActionRecorder {
+  private static readonly MAX_ACTIONS = MAX_RECORDING_ACTIONS;
   private view: WebContentsView | null = null;
   private isRecording = false;
   private actions: RecordedAction[] = [];
   private debugger: Electron.Debugger | null = null;
   public onActionCallback?: (action: RecordedAction) => void;
+  public onMaxActionsReached?: () => void; // Callback when max actions reached
   private snapshotManager: SnapshotManager;
 
   // Tab context for current recording
@@ -18,20 +21,6 @@ export class ActionRecorder {
   private currentTabTitle: string | null = null;
   private currentWebContentsId: number | null = null;
 
-  private recentNetworkRequests: Array<{
-    url: string;
-    method: string;
-    type: string;
-    status?: number;
-    timestamp: number;
-    completed: boolean;
-  }> = [];
-
-  private pendingActions = new Map<string, {
-    action: RecordedAction;
-    timestamp: number;
-    verificationDeadline: number;
-  }>();
 
 
   constructor(view?: WebContentsView) {
@@ -47,6 +36,13 @@ export class ActionRecorder {
    */
   public setActionCallback(callback: (action: RecordedAction) => void): void {
     this.onActionCallback = callback;
+  }
+
+  /**
+   * Set callback for when max actions limit is reached
+   */
+  public setMaxActionsCallback(callback: () => void): void {
+    this.onMaxActionsReached = callback;
   }
 
   /**
@@ -77,15 +73,6 @@ export class ActionRecorder {
     try {
       console.log(`🔄 Switching recording to tab: ${tabId} (${tabTitle})`);
 
-      // Detach from current debugger if attached
-      if (this.debugger && this.debugger.isAttached()) {
-        try {
-          this.debugger.detach();
-        } catch (error) {
-          console.warn('Error detaching previous debugger:', error);
-        }
-      }
-
       // Update to new view
       this.view = newView;
       this.debugger = newView.webContents.debugger;
@@ -94,12 +81,7 @@ export class ActionRecorder {
       this.currentTabTitle = tabTitle;
       this.currentWebContentsId = newView.webContents.id;
 
-      // Attach debugger to new view
-      this.debugger.attach('1.3');
-      console.log('✅ CDP Debugger attached to new tab');
-
-      // Re-enable CDP domains
-      await this.enableCDPDomains();
+      await this.injectEventTracker();
 
       // Re-setup event listeners
       this.setupEventListeners();
@@ -135,14 +117,6 @@ export class ActionRecorder {
     try {
       this.debugger = this.view.webContents.debugger;
       
-      // Attach debugger if not already attached (could be attached by PasswordAutomation)
-      if (!this.debugger.isAttached()) {
-        this.debugger.attach('1.3');
-        console.log('✅ CDP Debugger attached');
-      } else {
-        console.log('✅ CDP Debugger already attached, reusing existing connection');
-      }
-
       this.actions = [];
       this.isRecording = true;
 
@@ -159,7 +133,7 @@ export class ActionRecorder {
         await this.snapshotManager.initializeRecording(recordingId);
       }
 
-      await this.enableCDPDomains();
+      await this.injectEventTracker();
       this.setupEventListeners();
 
       console.log('🎬 Recording started');
@@ -180,9 +154,6 @@ export class ActionRecorder {
     }
 
     try {
-      if (this.debugger && this.debugger.isAttached()) {
-        this.debugger.detach();
-      }
 
       this.isRecording = false;
       this.actions.sort((a, b) => a.timestamp - b.timestamp);
@@ -262,36 +233,18 @@ export class ActionRecorder {
   }
 
   /**
-   * Enable required CDP domains
+   * Update tab title from current page
    */
-  private async enableCDPDomains(): Promise<void> {
-    if (!this.debugger) {
-      throw new Error('Debugger not initialized');
-    }
-
+  private async updateTabTitle(): Promise<void> {
+    if (!this.view) return;
+    
     try {
-      await this.debugger.sendCommand('DOM.enable');
-      console.log('✓ DOM domain enabled');
-      await this.debugger.sendCommand('Page.enable');
-      console.log('✓ Page domain enabled');
-      await this.debugger.sendCommand('Runtime.enable');
-      console.log('✓ Runtime domain enabled');
-      await this.debugger.sendCommand('Network.enable');
-      console.log('✓ Network domain enabled');
-      await this.debugger.sendCommand('Log.enable');
-      console.log('✓ Log domain enabled');
-      await this.debugger.sendCommand('DOM.getDocument', { depth: -1 });
-      console.log('✓ DOM document loaded');
-
-      await this.debugger.sendCommand('Page.setLifecycleEventsEnabled', { 
-        enabled: true 
-      });
-      await this.injectEventTracker();
-      console.log('✓ Event tracker injected');
-
+      const title = this.view.webContents.getTitle();
+      if (title) {
+        this.currentTabTitle = title;
+      }
     } catch (error) {
-      console.error('Error enabling CDP domains:', error);
-      throw error;
+      console.error('Failed to update tab title:', error);
     }
   }
 
@@ -318,53 +271,396 @@ export class ActionRecorder {
       (function() {
         if (window.__browzerRecorderInstalled) return;
         window.__browzerRecorderInstalled = true;
+        
+        /**
+         * Element extraction with multiple selector strategies
+         * Generates unique, reliable selectors for precise automation
+         */
+        function extractElementTarget(element) {
+          const rect = element.getBoundingClientRect();
+          
+          // Collect all attributes
+          const attributes = {};
+          for (const attr of element.attributes) {
+            attributes[attr.name] = attr.value;
+          }
+          
+          // Generate multiple selector strategies
+          const selectorStrategies = generateMultipleSelectorStrategies(element);
+          
+          return {
+            selector: selectorStrategies.primary,
+            tagName: element.tagName,
+            text: (element.innerText || element.textContent || '').substring(0, 200).trim() || undefined,
+            value: element.value || undefined,
+            boundingBox: {
+              x: Math.round(rect.x),
+              y: Math.round(rect.y),
+              width: Math.round(rect.width),
+              height: Math.round(rect.height)
+            },
+            parentSelector: element.parentElement ? getSelector(element.parentElement) : undefined,
+            isDisabled: element.disabled || element.getAttribute('aria-disabled') === 'true' || undefined,
+            attributes: attributes,
+            // NEW: Position info for precise matching
+            elementIndex: getElementIndex(element),
+            siblingCount: element.parentElement ? element.parentElement.children.length : 0
+          };
+        }
+        
+        /**
+         * Generate multiple selector strategies for maximum reliability
+         * Returns primary selectors using different approaches
+         */
+        function generateMultipleSelectorStrategies(element) {
+          const strategies = [];
+          
+          // Strategy 1: ID selector (most reliable if available)
+          if (element.id && !element.id.match(/^:r[0-9a-z]+:/)) {
+            strategies.push('#' + CSS.escape(element.id));
+          }
+          
+          // Strategy 2: data-testid or data-* attributes
+          if (element.hasAttribute('data-testid')) {
+            strategies.push('[data-testid="' + element.getAttribute('data-testid') + '"]');
+          }
+          for (const attr of element.attributes) {
+            if (attr.name.startsWith('data-') && attr.name !== 'data-testid' && attr.value) {
+              strategies.push('[' + attr.name + '="' + CSS.escape(attr.value) + '"]');
+              if (strategies.length >= 6) break;
+            }
+          }
+          
+          // Strategy 3: ARIA attributes (accessible and stable)
+          if (element.hasAttribute('aria-label')) {
+            const ariaLabel = element.getAttribute('aria-label');
+            strategies.push('[aria-label="' + CSS.escape(ariaLabel) + '"]');
+            strategies.push(element.tagName.toLowerCase() + '[aria-label="' + CSS.escape(ariaLabel) + '"]');
+          }
+          if (element.hasAttribute('role')) {
+            const role = element.getAttribute('role');
+            strategies.push('[role="' + role + '"]');
+          }
+          
+          // Strategy 4: Name attribute (for form elements)
+          if (element.name) {
+            strategies.push(element.tagName.toLowerCase() + '[name="' + CSS.escape(element.name) + '"]');
+          }
+          
+          // Strategy 5: Type + other attributes combination
+          if (element.type) {
+            strategies.push(element.tagName.toLowerCase() + '[type="' + element.type + '"]');
+          }
+          
+          // Strategy 6: Unique class-based selector with nth-child
+          const uniqueClassSelector = getUniqueClassSelector(element);
+          if (uniqueClassSelector) {
+            strategies.push(uniqueClassSelector);
+          }
+          
+          // Strategy 7: Full path selector (hierarchical)
+          const pathSelector = getPathSelector(element);
+          if (pathSelector) {
+            strategies.push(pathSelector);
+          }
+          
+          // Strategy 8: nth-child based selector (position-based)
+          const nthChildSelector = getNthChildSelector(element);
+          if (nthChildSelector) {
+            strategies.push(nthChildSelector);
+          }
+          
+          // Deduplicate and validate
+          const uniqueStrategies = [...new Set(strategies)].filter(s => s && s.length > 0);
+          
+          return {
+            primary: uniqueStrategies[0] || element.tagName.toLowerCase(),
+          };
+        }
+        
+        /**
+         * Generate optimized CSS selector (legacy function, still used for parent)
+         */
+        function getSelector(element) {
+          if (element.id && !element.id.match(/^:r[0-9a-z]+:/)) {
+            return '#' + CSS.escape(element.id);
+          }
+          if (element.hasAttribute('data-testid')) {
+            return '[data-testid="' + element.getAttribute('data-testid') + '"]';
+          }
+          
+          let path = [];
+          let current = element;
+          while (current && current.nodeType === Node.ELEMENT_NODE && path.length < 4) {
+            let selector = current.nodeName.toLowerCase();
+            if (current.id && !current.id.match(/^:r[0-9a-z]+:/)) {
+              selector += '#' + CSS.escape(current.id);
+              path.unshift(selector);
+              break;
+            }
+            if (current.hasAttribute('data-testid')) {
+              selector += '[data-testid="' + current.getAttribute('data-testid') + '"]';
+              path.unshift(selector);
+              break;
+            }
+            if (current.className && typeof current.className === 'string') {
+              const classes = current.className.trim().split(/\\s+/)
+                .filter(c => c && !c.match(/^(ng-|_|css-)/))
+                .slice(0, 3)
+                .map(c => CSS.escape(c))
+                .join('.');
+              if (classes) selector += '.' + classes;
+            }
+            path.unshift(selector);
+            current = current.parentElement;
+          }
+          return path.join(' > ');
+        }
+        
+        /**
+         * Get unique class-based selector
+         */
+        function getUniqueClassSelector(element) {
+          if (!element.className || typeof element.className !== 'string') return null;
+          
+          const classes = element.className.trim().split(/\\s+/)
+            .filter(c => c && !c.match(/^(ng-|_|css-|active|focus|hover)/));
+          
+          if (classes.length === 0) return null;
+          
+          const tagName = element.tagName.toLowerCase();
+          const classSelector = tagName + '.' + classes.slice(0, 3).map(c => CSS.escape(c)).join('.');
+          
+          // Check if this selector is unique
+          const matches = document.querySelectorAll(classSelector);
+          if (matches.length === 1) {
+            return classSelector;
+          }
+          
+          // If not unique, add nth-of-type
+          const siblings = Array.from(element.parentElement?.children || [])
+            .filter(el => el.tagName === element.tagName);
+          const index = siblings.indexOf(element);
+          if (index >= 0) {
+            return classSelector + ':nth-of-type(' + (index + 1) + ')';
+          }
+          
+          return classSelector;
+        }
+        
+        /**
+         * Get full path selector with smart truncation
+         */
+        function getPathSelector(element) {
+          let path = [];
+          let current = element;
+          let depth = 0;
+          
+          while (current && current.nodeType === Node.ELEMENT_NODE && depth < 5) {
+            let selector = current.nodeName.toLowerCase();
+            
+            // Stop at elements with stable IDs
+            if (current.id && !current.id.match(/^:r[0-9a-z]+:/)) {
+              selector += '#' + CSS.escape(current.id);
+              path.unshift(selector);
+              break;
+            }
+            
+            // Add classes (up to 3)
+            if (current.className && typeof current.className === 'string') {
+              const classes = current.className.trim().split(/\\s+/)
+                .filter(c => c && !c.match(/^(ng-|_|css-|active|focus|hover)/))
+                .slice(0, 2)
+                .map(c => CSS.escape(c))
+                .join('.');
+              if (classes) selector += '.' + classes;
+            }
+            
+            path.unshift(selector);
+            current = current.parentElement;
+            depth++;
+          }
+          
+          return path.join(' > ');
+        }
+        
+        /**
+         * Get nth-child based selector for position-based matching
+         */
+        function getNthChildSelector(element) {
+          if (!element.parentElement) return null;
+          
+          const parent = element.parentElement;
+          const siblings = Array.from(parent.children);
+          const index = siblings.indexOf(element);
+          
+          if (index < 0) return null;
+          
+          const tagName = element.tagName.toLowerCase();
+          const parentSelector = getSelector(parent);
+          
+          return parentSelector + ' > ' + tagName + ':nth-child(' + (index + 1) + ')';
+        }
+        
+        /**
+         * Get element index among all siblings
+         */
+        function getElementIndex(element) {
+          if (!element.parentElement) return 0;
+          return Array.from(element.parentElement.children).indexOf(element);
+        }
+        
+        /**
+         * Find interactive parent element
+         */
+        function findInteractiveParent(element, maxDepth = 5) {
+          let current = element;
+          let depth = 0;
+          while (current && depth < maxDepth) {
+            if (isInteractiveElement(current)) return current;
+            current = current.parentElement;
+            depth++;
+          }
+          return element;
+        }
+        
+        /**
+         * Check if element is interactive
+         */
+        function isInteractiveElement(element) {
+          const tagName = element.tagName.toLowerCase();
+          const role = element.getAttribute('role');
+          const interactiveTags = ['a', 'button', 'input', 'select', 'textarea', 'label'];
+          if (interactiveTags.includes(tagName)) return true;
+          const interactiveRoles = ['button', 'link', 'menuitem', 'tab', 'checkbox', 'radio', 'switch', 'option', 'textbox', 'searchbox', 'combobox'];
+          if (role && interactiveRoles.includes(role)) return true;
+          // Check for contenteditable elements (Google Docs, Notion, etc.)
+          if (element.isContentEditable || element.getAttribute('contenteditable') === 'true') return true;
+          if (element.onclick || element.hasAttribute('onclick')) return true;
+          const style = window.getComputedStyle(element);
+          if (style.cursor === 'pointer') return true;
+          if (element.hasAttribute('tabindex') && element.getAttribute('tabindex') !== '-1') return true;
+          return false;
+        }
+        
         document.addEventListener('click', (e) => {
           const clickedElement = e.target;
           const interactiveElement = findInteractiveParent(clickedElement);
-          const isDirectClick = interactiveElement === clickedElement;
-          const targetInfo = buildElementTarget(interactiveElement);
-          let clickedElementInfo = null;
-          if (!isDirectClick) {
-            clickedElementInfo = buildElementTarget(clickedElement);
-          }
-          const preClickState = {
-            url: window.location.href,
-            scrollY: window.scrollY,
-            scrollX: window.scrollX,
-            activeElement: document.activeElement?.tagName,
-            openModals: document.querySelectorAll('[role="dialog"], [aria-modal="true"], .modal:not([style*="display: none"])').length
-          };
+          const targetInfo = extractElementTarget(interactiveElement);
           
           console.info('[BROWZER_ACTION]', JSON.stringify({
             type: 'click',
             timestamp: Date.now(),
             target: targetInfo,
-            position: { x: e.clientX, y: e.clientY },
-            metadata: {
-              isDirectClick: isDirectClick,
-              clickedElement: clickedElementInfo,
-              preClickState: preClickState
-            }
+            position: { x: e.clientX, y: e.clientY }
           }));
         }, true);
+        
+        // Smart input recording state
         let inputDebounce = {};
-        document.addEventListener('input', (e) => {
-          const target = e.target;
-          const tagName = target.tagName;
-          const inputType = target.type?.toLowerCase();
-          if (tagName === 'INPUT' || tagName === 'TEXTAREA') {
-            const key = target.id || target.name || getSelector(target);
-            const immediateTypes = ['checkbox', 'radio', 'file', 'range', 'color'];
-            const isImmediate = immediateTypes.includes(inputType);
-            
-            if (isImmediate) {
-              handleInputAction(target);
-            } else {
-              clearTimeout(inputDebounce[key]);
-              inputDebounce[key] = setTimeout(() => {
-                handleInputAction(target);
-              }, 500);
+        let lastRecordedValue = {}; // Track last recorded value to avoid duplicates
+        let activeInputElements = new Set(); // Track elements currently being edited
+        
+        /**
+         * Check if element or its parents are contenteditable (for Google Docs)
+         */
+        function isEditableElement(element) {
+          if (!element) return false;
+          
+          // Check the element itself
+          const tagName = element.tagName;
+          const role = element.getAttribute('role');
+          const isContentEditable = element.isContentEditable || element.getAttribute('contenteditable') === 'true';
+          const isTraditionalInput = tagName === 'INPUT' || tagName === 'TEXTAREA';
+          const isRichTextEditor = isContentEditable || 
+                                   role === 'textbox' || 
+                                   role === 'searchbox' || 
+                                   role === 'combobox';
+          
+          if (isTraditionalInput || isRichTextEditor) {
+            return { element, isTraditionalInput, isRichTextEditor };
+          }
+          
+          // Check parent elements (up to 3 levels) for contenteditable
+          // This fixes Google Docs where input events come from nested spans
+          let current = element.parentElement;
+          let depth = 0;
+          while (current && depth < 3) {
+            if (current.isContentEditable || current.getAttribute('contenteditable') === 'true') {
+              return { element: current, isTraditionalInput: false, isRichTextEditor: true };
             }
+            current = current.parentElement;
+            depth++;
+          }
+          
+          return null;
+        }
+        
+        /**
+         * Record input action with deduplication
+         */
+        function recordInputIfChanged(target, isRichTextEditor) {
+          const key = target.id || target.name || getSelector(target);
+          const currentValue = isRichTextEditor 
+            ? (target.innerText || target.textContent || '').trim()
+            : target.value;
+          
+          // Only record if value actually changed
+          if (lastRecordedValue[key] !== currentValue) {
+            lastRecordedValue[key] = currentValue;
+            handleInputAction(target, isRichTextEditor);
+          }
+        }
+        
+        // Input event: Track changes but use longer debounce (3 seconds)
+        // This is a fallback for very long typing sessions
+        document.addEventListener('input', (e) => {
+          const editableInfo = isEditableElement(e.target);
+          if (!editableInfo) return;
+          
+          const { element: target, isTraditionalInput, isRichTextEditor } = editableInfo;
+          const key = target.id || target.name || getSelector(target);
+          const inputType = target.type?.toLowerCase();
+          const immediateTypes = ['checkbox', 'radio', 'file', 'range', 'color'];
+          const isImmediate = immediateTypes.includes(inputType);
+          
+          // Track that this element is being edited
+          activeInputElements.add(key);
+          
+          if (isImmediate) {
+            // Record immediately for checkboxes, radios, etc.
+            handleInputAction(target);
+          } else {
+            // For text input: Use 3-second debounce as fallback
+            // Primary recording happens on blur event
+            clearTimeout(inputDebounce[key]);
+            inputDebounce[key] = setTimeout(() => {
+              recordInputIfChanged(target, isRichTextEditor);
+            }, 3000); // 3 seconds - only fires if user types continuously
+          }
+        }, true);
+        
+        // Blur event: Record when user leaves the input field (PRIMARY METHOD)
+        // This is the main way we capture completed input
+        document.addEventListener('blur', (e) => {
+          const editableInfo = isEditableElement(e.target);
+          if (!editableInfo) return;
+          
+          const { element: target, isRichTextEditor } = editableInfo;
+          const key = target.id || target.name || getSelector(target);
+          const inputType = target.type?.toLowerCase();
+          const immediateTypes = ['checkbox', 'radio', 'file', 'range', 'color'];
+          
+          // Skip immediate types (already recorded on input)
+          if (immediateTypes.includes(inputType)) return;
+          
+          // Clear any pending debounce
+          clearTimeout(inputDebounce[key]);
+          
+          // Record the final value when user leaves the field
+          if (activeInputElements.has(key)) {
+            recordInputIfChanged(target, isRichTextEditor);
+            activeInputElements.delete(key);
           }
         }, true);
         document.addEventListener('change', (e) => {
@@ -382,108 +678,68 @@ export class ActionRecorder {
             handleFileUploadAction(target);
           }
         }, true);
-        function handleInputAction(target) {
+        function handleInputAction(target, isRichTextEditor = false) {
           const inputType = target.type?.toLowerCase();
           let actionType = 'input';
-          let value = target.value;
-          let metadata = {};
+          let value;
+          
           if (inputType === 'checkbox') {
             actionType = 'checkbox';
             value = target.checked;
-            metadata = { checked: target.checked };
           } else if (inputType === 'radio') {
             actionType = 'radio';
             value = target.value;
-            metadata = { checked: target.checked, name: target.name };
-          } else if (inputType === 'range') {
-            metadata = { min: target.min, max: target.max, step: target.step };
-          } else if (inputType === 'color') {
-            metadata = { colorValue: target.value };
+          } else if (isRichTextEditor) {
+            // For contenteditable and ARIA textbox elements, extract text content
+            // Use innerText for better formatting (respects line breaks, ignores hidden elements)
+            value = target.innerText || target.textContent || '';
+            // Trim and limit length to avoid huge payloads
+            value = value.trim().substring(0, 5000);
+          } else {
+            // Traditional input/textarea
+            value = target.value;
           }
           
           console.info('[BROWZER_ACTION]', JSON.stringify({
             type: actionType,
             timestamp: Date.now(),
-            target: {
-              selector: getSelector(target),
-              tagName: target.tagName,
-              id: target.id || undefined,
-              name: target.name || undefined,
-              type: inputType,
-              placeholder: target.placeholder || undefined
-            },
-            value: value,
-            metadata: metadata
+            target: extractElementTarget(target),
+            value: value
           }));
         }
         function handleSelectAction(target) {
           const isMultiple = target.multiple;
           let selectedValues = [];
-          let selectedTexts = [];
           
           if (isMultiple) {
             const options = Array.from(target.selectedOptions);
             selectedValues = options.map(opt => opt.value);
-            selectedTexts = options.map(opt => opt.text);
           } else {
             const selectedOption = target.options[target.selectedIndex];
             selectedValues = [selectedOption?.value];
-            selectedTexts = [selectedOption?.text];
           }
           
           console.info('[BROWZER_ACTION]', JSON.stringify({
             type: 'select',
             timestamp: Date.now(),
-            target: {
-              selector: getSelector(target),
-              tagName: target.tagName,
-              id: target.id || undefined,
-              name: target.name || undefined,
-              multiple: isMultiple
-            },
-            value: isMultiple ? selectedValues : selectedValues[0],
-            metadata: {
-              selectedTexts: selectedTexts,
-              optionCount: target.options.length,
-              isMultiple: isMultiple
-            }
+            target: extractElementTarget(target),
+            value: isMultiple ? selectedValues : selectedValues[0]
           }));
         }
         function handleCheckboxAction(target) {
           console.info('[BROWZER_ACTION]', JSON.stringify({
             type: 'checkbox',
             timestamp: Date.now(),
-            target: {
-              selector: getSelector(target),
-              tagName: target.tagName,
-              id: target.id || undefined,
-              name: target.name || undefined,
-              type: 'checkbox'
-            },
-            value: target.checked,
-            metadata: {
-              checked: target.checked,
-              label: target.labels?.[0]?.innerText || undefined
-            }
+            target: extractElementTarget(target),
+            value: target.checked
           }));
         }
         function handleRadioAction(target) {
           console.info('[BROWZER_ACTION]', JSON.stringify({
             type: 'radio',
             timestamp: Date.now(),
-            target: {
-              selector: getSelector(target),
-              tagName: target.tagName,
-              id: target.id || undefined,
-              name: target.name || undefined,
-              type: 'radio'
-            },
-            value: target.value,
-            metadata: {
-              checked: target.checked,
-              groupName: target.name,
-              label: target.labels?.[0]?.innerText || undefined
-            }
+            target: extractElementTarget(target),
+            value: target.value
           }));
         }
         function handleFileUploadAction(target) {
@@ -491,58 +747,17 @@ export class ActionRecorder {
           console.info('[BROWZER_ACTION]', JSON.stringify({
             type: 'file-upload',
             timestamp: Date.now(),
-            target: {
-              selector: getSelector(target),
-              tagName: target.tagName,
-              id: target.id || undefined,
-              name: target.name || undefined,
-              type: 'file'
-            },
-            value: files.map(f => f.name).join(', '),
-            metadata: {
-              fileCount: files.length,
-              fileNames: files.map(f => f.name),
-              fileSizes: files.map(f => f.size),
-              fileTypes: files.map(f => f.type),
-              accept: target.accept || undefined,
-              multiple: target.multiple
-            }
+            target: extractElementTarget(target),
+            value: files.map(f => f.name).join(', ')
           }));
         }
         document.addEventListener('submit', (e) => {
           const target = e.target;
-          const formData = new FormData(target);
-          const formDataObj = {};
-          
-          for (const [key, value] of formData.entries()) {
-            const isSensitive = /password|secret|token|key|ssn|credit/i.test(key);
-            formDataObj[key] = isSensitive ? '[REDACTED]' : value;
-          }
-          const submitTrigger = document.activeElement;
-          const triggerInfo = submitTrigger && (
-            submitTrigger.tagName === 'BUTTON' || 
-            submitTrigger.type === 'submit'
-          ) ? {
-            selector: getSelector(submitTrigger),
-            tagName: submitTrigger.tagName,
-            text: submitTrigger.innerText || submitTrigger.value,
-            type: submitTrigger.type
-          } : null;
           
           console.info('[BROWZER_ACTION]', JSON.stringify({
             type: 'submit',
             timestamp: Date.now(),
-            target: {
-              selector: getSelector(target),
-              action: target.action || undefined,
-              method: target.method || 'GET',
-              fieldCount: formData.entries().length
-            },
-            metadata: {
-              triggeredBy: triggerInfo,
-              formData: formDataObj,
-              hasFileUpload: Array.from(target.elements).some(el => el.type === 'file')
-            }
+            target: extractElementTarget(target)
           }));
         }, true);
         document.addEventListener('keydown', (e) => {
@@ -555,324 +770,16 @@ export class ActionRecorder {
           const isImportantKey = importantKeys.includes(e.key);
           
           if (isShortcut || isImportantKey) {
-            let shortcut = '';
-            if (e.ctrlKey) shortcut += 'Ctrl+';
-            if (e.metaKey) shortcut += 'Cmd+';
-            if (e.altKey) shortcut += 'Alt+';
-            if (e.shiftKey) shortcut += 'Shift+';
-            shortcut += e.key;
             const focusedElement = document.activeElement;
-            const targetInfo = focusedElement ? {
-              selector: getSelector(focusedElement),
-              tagName: focusedElement.tagName,
-              id: focusedElement.id || undefined,
-              type: focusedElement.type || undefined
-            } : null;
             
             console.info('[BROWZER_ACTION]', JSON.stringify({
               type: 'keypress',
               timestamp: Date.now(),
               value: e.key,
-              metadata: {
-                shortcut: shortcut,
-                code: e.code,
-                ctrlKey: e.ctrlKey,
-                metaKey: e.metaKey,
-                shiftKey: e.shiftKey,
-                altKey: e.altKey,
-                isShortcut: isShortcut,
-                focusedElement: targetInfo
-              }
+              target: focusedElement ? extractElementTarget(focusedElement) : undefined
             }));
           }
         }, true);
-        
-        /**
-         * Find the actual interactive parent element
-         * Traverses up the DOM to find clickable elements like buttons, links, etc.
-         */
-        function findInteractiveParent(element, maxDepth = 5) {
-          let current = element;
-          let depth = 0;
-          
-          while (current && depth < maxDepth) {
-            if (isInteractiveElement(current)) {
-              return current;
-            }
-            current = current.parentElement;
-            depth++;
-          }
-          return element;
-        }
-        
-        /**
-         * Check if element is interactive (clickable)
-         */
-        function isInteractiveElement(element) {
-          const tagName = element.tagName.toLowerCase();
-          const role = element.getAttribute('role');
-          const type = element.getAttribute('type');
-          const interactiveTags = ['a', 'button', 'input', 'select', 'textarea', 'label'];
-          if (interactiveTags.includes(tagName)) {
-            return true;
-          }
-          const interactiveRoles = [
-            'button', 'link', 'menuitem', 'tab', 'checkbox', 'radio',
-            'switch', 'option', 'textbox', 'searchbox', 'combobox'
-          ];
-          if (role && interactiveRoles.includes(role)) {
-            return true;
-          }
-          if (element.onclick || element.hasAttribute('onclick')) {
-            return true;
-          }
-          const style = window.getComputedStyle(element);
-          if (style.cursor === 'pointer') {
-            return true;
-          }
-          if (element.hasAttribute('tabindex') && element.getAttribute('tabindex') !== '-1') {
-            return true;
-          }
-          
-          return false;
-        }
-        
-        /**
-         * Build comprehensive element target with multiple selector strategies
-         */
-        function buildElementTarget(element) {
-          const rect = element.getBoundingClientRect();
-          const computedStyle = window.getComputedStyle(element);
-          const selectors = generateSelectorStrategies(element);
-          const bestSelector = selectors.reduce((best, current) => 
-            current.score > best.score ? current : best
-          );
-          
-          return {
-            selector: bestSelector.selector,
-            selectors: selectors,
-            tagName: element.tagName,
-            id: element.id || undefined,
-            className: element.className || undefined,
-            name: element.name || undefined,
-            type: element.type || undefined,
-            role: element.getAttribute('role') || undefined,
-            ariaLabel: element.getAttribute('aria-label') || undefined,
-            ariaDescribedBy: element.getAttribute('aria-describedby') || undefined,
-            title: element.title || undefined,
-            placeholder: element.placeholder || undefined,
-            text: element.innerText?.substring(0, 100) || undefined,
-            value: element.value || undefined,
-            href: element.href || undefined,
-            dataTestId: element.getAttribute('data-testid') || undefined,
-            dataCy: element.getAttribute('data-cy') || undefined,
-            boundingRect: {
-              x: rect.x,
-              y: rect.y,
-              width: rect.width,
-              height: rect.height,
-              top: rect.top,
-              right: rect.right,
-              bottom: rect.bottom,
-              left: rect.left
-            },
-            isVisible: isVisible(element),
-            isInteractive: isInteractiveElement(element)
-          };
-        }
-        
-        /**
-         * Generate multiple selector strategies with confidence scores
-         */
-        function generateSelectorStrategies(element) {
-          const strategies = [];
-          if (element.id) {
-            strategies.push({
-              strategy: 'id',
-              selector: '#' + CSS.escape(element.id),
-              score: 95,
-              description: 'ID selector (most reliable)'
-            });
-          }
-          if (element.hasAttribute('data-testid')) {
-            const testId = element.getAttribute('data-testid');
-            strategies.push({
-              strategy: 'data-testid',
-              selector: '[data-testid="' + testId + '"]',
-              score: 90,
-              description: 'Test ID selector'
-            });
-          }
-          if (element.hasAttribute('data-cy')) {
-            const cy = element.getAttribute('data-cy');
-            strategies.push({
-              strategy: 'data-cy',
-              selector: '[data-cy="' + cy + '"]',
-              score: 90,
-              description: 'Cypress selector'
-            });
-          }
-          if (element.hasAttribute('aria-label')) {
-            const ariaLabel = element.getAttribute('aria-label');
-            strategies.push({
-              strategy: 'aria-label',
-              selector: '[aria-label="' + ariaLabel + '"]',
-              score: 80,
-              description: 'ARIA label selector'
-            });
-          }
-          if (element.hasAttribute('role') && element.hasAttribute('name')) {
-            const role = element.getAttribute('role');
-            const name = element.getAttribute('name');
-            strategies.push({
-              strategy: 'role',
-              selector: '[role="' + role + '"][name="' + name + '"]',
-              score: 75,
-              description: 'Role + name selector'
-            });
-          }
-          const text = element.innerText?.trim();
-          if (text && text.length > 0 && text.length < 50) {
-            const tagName = element.tagName.toLowerCase();
-            if (['button', 'a', 'span'].includes(tagName)) {
-              strategies.push({
-                strategy: 'text',
-                selector: tagName + ':contains("' + text.substring(0, 30) + '")',
-                score: 70,
-                description: 'Text content selector'
-              });
-            }
-          }
-          const cssSelector = generateCSSSelector(element);
-          strategies.push({
-            strategy: 'css',
-            selector: cssSelector,
-            score: 60,
-            description: 'Structural CSS selector'
-          });
-          const xpath = generateXPath(element);
-          strategies.push({
-            strategy: 'xpath',
-            selector: xpath,
-            score: 50,
-            description: 'XPath selector'
-          });
-          
-          return strategies;
-        }
-        
-        /**
-         * Generate CSS selector (improved version)
-         */
-        function generateCSSSelector(element) {
-          if (element.id) {
-            return '#' + CSS.escape(element.id);
-          }
-          
-          let path = [];
-          let current = element;
-          
-          while (current && current.nodeType === Node.ELEMENT_NODE && path.length < 5) {
-            let selector = current.nodeName.toLowerCase();
-            if (current.hasAttribute('data-testid')) {
-              selector += '[data-testid="' + current.getAttribute('data-testid') + '"]';
-              path.unshift(selector);
-              break;
-            }
-            if (current.hasAttribute('data-cy')) {
-              selector += '[data-cy="' + current.getAttribute('data-cy') + '"]';
-              path.unshift(selector);
-              break;
-            }
-            if (current.id) {
-              selector += '#' + CSS.escape(current.id);
-              path.unshift(selector);
-              break;
-            }
-            if (current.className && typeof current.className === 'string') {
-              const classes = current.className.trim().split(/\\s+/)
-                .filter(c => c && !c.match(/^(ng-|_)/)) // Filter out framework classes
-                .slice(0, 2)
-                .map(c => CSS.escape(c))
-                .join('.');
-              if (classes) {
-                selector += '.' + classes;
-              }
-            }
-            const parent = current.parentElement;
-            if (parent) {
-              const siblings = Array.from(parent.children).filter(c => 
-                c.nodeName === current.nodeName
-              );
-              if (siblings.length > 1) {
-                const index = siblings.indexOf(current) + 1;
-                selector += ':nth-child(' + index + ')';
-              }
-            }
-            
-            path.unshift(selector);
-            current = current.parentElement;
-          }
-          
-          return path.join(' > ');
-        }
-        
-        /**
-         * Generate XPath selector
-         */
-        function generateXPath(element) {
-          if (element.id) {
-            return '//*[@id="' + element.id + '"]';
-          }
-          
-          const parts = [];
-          let current = element;
-          
-          while (current && current.nodeType === Node.ELEMENT_NODE) {
-            let index = 1;
-            let sibling = current.previousSibling;
-            
-            while (sibling) {
-              if (sibling.nodeType === Node.ELEMENT_NODE && 
-                  sibling.nodeName === current.nodeName) {
-                index++;
-              }
-              sibling = sibling.previousSibling;
-            }
-            
-            const tagName = current.nodeName.toLowerCase();
-            const part = tagName + '[' + index + ']';
-            parts.unshift(part);
-            
-            current = current.parentElement;
-          }
-          
-          return '/' + parts.join('/');
-        }
-        
-        /**
-         * Check if element is visible
-         */
-        function isVisible(element) {
-          const rect = element.getBoundingClientRect();
-          const style = window.getComputedStyle(element);
-          return rect.width > 0 && 
-                 rect.height > 0 && 
-                 style.display !== 'none' && 
-                 style.visibility !== 'hidden' &&
-                 style.opacity !== '0';
-        }
-        
-        /**
-         * Legacy: Simple selector generator (kept for compatibility)
-         */
-        function getSelector(element) {
-          const selectors = generateSelectorStrategies(element);
-          const best = selectors.reduce((best, current) => 
-            current.score > best.score ? current : best
-          );
-          return best.selector;
-        }
       })();
     `;
   }
@@ -914,42 +821,20 @@ export class ActionRecorder {
           if (firstArg === '[BROWZER_ACTION]') {
             try {
               const actionData = JSON.parse(params.args[1].value);
-              await this.handlePendingAction(actionData);
-              
+              await this.recordAction(actionData);
             } catch (error) {
               console.error('Error parsing action:', error);
             }
           }
         }
         break;
-      case 'Network.requestWillBeSent':
-        this.recentNetworkRequests.push({
-          url: params.request.url,
-          method: params.request.method || 'GET',
-          type: params.type || 'other',
-          timestamp: Date.now(),
-          completed: false
-        });
-        break;
 
-      case 'Network.responseReceived':
-      case 'Network.loadingFinished':
-        const completedReq = this.recentNetworkRequests.find(
-          r => r.url === params.response?.url && !r.completed
-        );
-        if (completedReq) {
-          completedReq.completed = true;
-        }
-        break;
-      case 'Page.lifecycleEvent':
-        if (params.name === 'networkIdle') {
-          console.log('🌐 Network is idle');
-          await this.processPendingActions();
-        }
-        break;
       case 'Page.frameNavigated':
         if (params.frame.parentId === undefined) {
           const newUrl = params.frame.url;
+          
+          // Update current tab URL to reflect navigation
+          this.currentTabUrl = newUrl;
           
           if (this.isSignificantNavigation(newUrl)) {
             this.recordNavigation(newUrl);
@@ -960,6 +845,8 @@ export class ActionRecorder {
       case 'Page.loadEventFired':
         console.log('📄 Page loaded');
         await this.injectEventTracker();
+        // Update tab title after page load
+        await this.updateTabTitle();
         break;
 
       default:
@@ -968,205 +855,48 @@ export class ActionRecorder {
   }
 
   /**
-   * 🆕 Handle pending action (await verification)
+   * Record action immediately as it occurs
    */
-  private async handlePendingAction(actionData: RecordedAction): Promise<void> {
-    const actionId = `${actionData.type}-${actionData.timestamp}`;
-    
-    // Add tab context to action
+  private async recordAction(actionData: RecordedAction): Promise<void> {
+    // Check max actions limit first
+    if (this.actions.length >= ActionRecorder.MAX_ACTIONS) {
+      console.warn(`⚠️ Max actions limit (${ActionRecorder.MAX_ACTIONS}) reached, stopping recording`);
+      if (this.onMaxActionsReached) {
+        this.onMaxActionsReached();
+      }
+      return;
+    }
+
+    // Enrich action with tab context
     const enrichedAction: RecordedAction = {
       ...actionData,
       tabId: this.currentTabId || undefined,
       tabUrl: this.currentTabUrl || undefined,
       tabTitle: this.currentTabTitle || undefined,
-      webContentsId: this.currentWebContentsId || undefined
+      webContentsId: this.currentWebContentsId || undefined,
     };
     
-    // For keypress and certain actions, verify immediately without waiting
-    const immediateVerificationTypes = ['keypress', 'input', 'checkbox', 'radio', 'select'];
-    const shouldVerifyImmediately = immediateVerificationTypes.includes(actionData.type);
-    
-    if (shouldVerifyImmediately) {
-      // Verify immediately and record
-      enrichedAction.verified = true;
-      enrichedAction.verificationTime = 0;
-      
-      // Capture snapshot asynchronously (non-blocking)
-      if (this.view) {
-        this.snapshotManager.captureSnapshot(this.view, enrichedAction).then(snapshotPath => {
+    // Capture snapshot asynchronously (non-blocking)
+    if (this.view) {
+      this.snapshotManager.captureSnapshot(this.view, enrichedAction)
+        .then(snapshotPath => {
           if (snapshotPath) {
             enrichedAction.snapshotPath = snapshotPath;
           }
-        }).catch(err => console.error('Snapshot capture failed:', err));
-      }
-      
-      this.actions.push(enrichedAction);
-      console.log(`✅ Action immediately verified: ${actionData.type}`);
-      if (this.onActionCallback) {
-        this.onActionCallback(enrichedAction);
-      }
-      return;
+        })
+        .catch(err => console.error('Snapshot capture failed:', err));
     }
     
-    // For other actions (like clicks), use verification with shorter deadline
-    const verificationDeadline = Date.now() + 500; // Reduced from 1000ms to 500ms
+    // Record action immediately
+    this.actions.push(enrichedAction);
+    console.log(`✅ Action recorded: ${actionData.type} (${this.actions.length}/${ActionRecorder.MAX_ACTIONS})`);
     
-    this.pendingActions.set(actionId, {
-      action: enrichedAction,
-      timestamp: Date.now(),
-      verificationDeadline
-    });
-    
-    console.log('⏳ Action pending verification:', actionData);
-    if(actionData.target.selectors){
-      console.log("sectors: ", actionData.target.selectors)
-    }
-    setTimeout(async () => {
-      await this.verifyAndFinalizeAction(actionId);
-    }, 500);
-  }
-
-  /**
-   * 🆕 Verify action effects and finalize
-   */
-  private async verifyAndFinalizeAction(actionId: string): Promise<void> {
-    const pending = this.pendingActions.get(actionId);
-    if (!pending) return;
-    
-    const { action, timestamp } = pending;
-    const preClickState = action.metadata?.preClickState;
-    const effects = await this.detectClickEffects(timestamp, preClickState);
-    const verifiedAction: RecordedAction = {
-      ...action,
-      verified: true,
-      verificationTime: Date.now() - timestamp,
-      effects
-    };
-    
-    // Capture snapshot asynchronously for verified click actions
-    if (this.view) {
-      this.snapshotManager.captureSnapshot(this.view, verifiedAction).then(snapshotPath => {
-        if (snapshotPath) {
-          verifiedAction.snapshotPath = snapshotPath;
-        }
-      }).catch(err => console.error('Snapshot capture failed:', err));
-    }
-    
-    this.actions.push(verifiedAction);
-    console.log('✅ Action verified:', verifiedAction.type);
-    console.log('📊 Effects:', effects.summary || 'none');
-    if(effects.network){
-      console.log('   Network:', effects.network);
-    }
-    if(effects.navigation){
-      console.log('   Navigation:', effects.navigation);
-    }
+    // Notify callback
     if (this.onActionCallback) {
-      this.onActionCallback(verifiedAction);
+      this.onActionCallback(enrichedAction);
     }
-    this.pendingActions.delete(actionId);
   }
 
-  /**
-   * Detect comprehensive click effects
-   */
-  private async detectClickEffects(clickTimestamp: number, preClickState?: any): Promise<any> {
-    const effects: any = {};
-    const effectSummary: string[] = [];
-    const allNetworkActivity = this.recentNetworkRequests.filter(
-      req => req.timestamp >= clickTimestamp && req.timestamp <= clickTimestamp + 1500
-    );
-    const significantRequests = allNetworkActivity.filter(req => 
-      this.isSignificantNetworkRequest(req.url, req.method, req.type)
-    );
-    
-    if (significantRequests.length > 0) {
-      effects.network = {
-        requestCount: significantRequests.length,
-        requests: significantRequests.map(req => ({
-          url: req.url,
-          method: req.method,
-          type: req.type,
-          status: req.status,
-          timing: req.timestamp - clickTimestamp
-        }))
-      };
-      effectSummary.push(`${significantRequests.length} network request(s)`);
-    }
-    try {
-      const pageEffects = await this.debugger.sendCommand('Runtime.evaluate', {
-        expression: `
-          (function() {
-            const effects = {
-              modal: null,
-              focus: null,
-              scroll: null,
-              stateChange: null
-            };
-            const currentState = {
-              url: window.location.href,
-              scrollY: window.scrollY,
-              scrollX: window.scrollX,
-              activeElement: document.activeElement?.tagName,
-              visibleModals: Array.from(document.querySelectorAll('[role="dialog"], [role="alertdialog"], [aria-modal="true"]')).filter(el => {
-                const style = window.getComputedStyle(el);
-                return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
-              }).length
-            };
-            return {
-              currentState: currentState,
-              effects: effects
-            };
-          })();
-        `,
-        returnByValue: true
-      });
-      
-      if (pageEffects.result?.value) {
-        const result = pageEffects.result.value;
-        const currentState = result.currentState;
-        const focused = currentState.activeElement;
-        if (focused && focused !== 'BODY' && focused !== 'HTML') {
-          const meaningfulFocusTags = ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'];
-          if (meaningfulFocusTags.includes(focused)) {
-            effects.focus = {
-              changed: true,
-              newFocusTagName: focused
-            };
-            effectSummary.push('focus changed to ' + focused.toLowerCase());
-          }
-        }
-        const scrollDistance = Math.max(
-          Math.abs(currentState.scrollY),
-          Math.abs(currentState.scrollX)
-        );
-        if (scrollDistance > 200) { // Significant scroll only
-          effects.scroll = {
-            occurred: true,
-            distance: scrollDistance
-          };
-          effectSummary.push('page scrolled');
-        }
-      }
-    } catch (error) {
-      console.error('Error detecting page effects:', error);
-    }
-    effects.summary = effectSummary.length > 0 
-      ? effectSummary.join(', ')
-      : 'no significant effects detected';
-    
-    return effects;
-  }
-
-  /**
-   * 🆕 Process all pending actions (called on networkIdle)
-   */
-  private async processPendingActions(): Promise<void> {
-    const pending = Array.from(this.pendingActions.keys());
-    for (const actionId of pending) {
-      await this.verifyAndFinalizeAction(actionId);
-    }
-  }
 
 
   /**
@@ -1186,60 +916,20 @@ export class ActionRecorder {
     return !ignorePatterns.some(pattern => url.startsWith(pattern) || url.includes(pattern));
   }
 
-  /**
-   * Filter: Check if network request is significant (not analytics/tracking/ping)
-   */
-  private isSignificantNetworkRequest(url: string, method: string, type: string): boolean {
-    if (type === 'Ping' || type === 'ping' || type === 'beacon') {
-      return false;
-    }
-    const ignorePatterns = [
-      '/gen_204',           // Google analytics
-      '/collect',           // Google Analytics
-      '/analytics',
-      '/tracking',
-      '/track',
-      '/beacon',
-      '/ping',
-      '/log',
-      '/telemetry',
-      'google-analytics.com',
-      'googletagmanager.com',
-      'doubleclick.net',
-      'facebook.com/tr',
-      'mixpanel.com',
-      'segment.com',
-      'amplitude.com',
-      'hotjar.com',
-      '/pixel',
-      '/impression',
-      'clarity.ms',
-      'bing.com/api/log'
-    ];
-    
-    if (ignorePatterns.some(pattern => url.includes(pattern))) {
-      return false;
-    }
-    if (type === 'Document') {
-      return true;
-    }
-    if (type === 'XHR' || type === 'Fetch') {
-      const apiPatterns = ['/api/', '/v1/', '/v2/', '/graphql', '/rest/', '/data/'];
-      const isApiCall = apiPatterns.some(pattern => url.includes(pattern));
-      const isStateChanging = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method.toUpperCase());
-      
-      return isApiCall || isStateChanging;
-    }
-    
-    return false;
-  }
-
-
 
   /**
    * Record navigation
    */
   private recordNavigation(url: string, timestamp?: number): void {
+    // Check if max actions limit reached
+    if (this.actions.length >= ActionRecorder.MAX_ACTIONS) {
+      console.warn(`⚠️ Max actions limit (${ActionRecorder.MAX_ACTIONS}) reached, skipping navigation`);
+      if (this.onMaxActionsReached) {
+        this.onMaxActionsReached();
+      }
+      return;
+    }
+    
     const action: RecordedAction = {
       type: 'navigate',
       timestamp: timestamp || Date.now(),
@@ -1248,12 +938,9 @@ export class ActionRecorder {
       tabUrl: this.currentTabUrl || undefined,
       tabTitle: this.currentTabTitle || undefined,
       webContentsId: this.currentWebContentsId || undefined,
-      verified: true, // Navigation is always verified
-      verificationTime: 0,
     };
 
     this.actions.push(action);
-    console.log('🧭 Navigation recorded:', action);
     if (this.onActionCallback) {
       this.onActionCallback(action);
     }

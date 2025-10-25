@@ -1,63 +1,36 @@
 
 /**
- * Selector strategy with confidence score
- */
-export interface SelectorStrategy {
-  strategy: 'id' | 'data-testid' | 'data-cy' | 'aria-label' | 'role' | 'text' | 'css' | 'xpath';
-  selector: string;
-  score: number; // 0-100, higher is more reliable
-  description?: string;
-}
-
-/**
- * Enhanced target information with multiple selector strategies
+ * ENHANCED element target information for recorded actions
+ * Now includes multiple selector strategies and position info for precise matching
  */
 export interface ElementTarget {
-  // Primary selector (best one)
+  // Element identification - PRIMARY selector
   selector: string;
-  
-  // Multiple selector strategies for fallback
-  selectors?: SelectorStrategy[];
-  
-  // Element identification
   tagName: string;
-  id?: string;
-  className?: string;
-  name?: string;
-  type?: string; // input type, button type, etc.
   
-  // Semantic attributes
-  role?: string;
-  ariaLabel?: string;
-  ariaDescribedBy?: string;
-  title?: string;
-  placeholder?: string;
   
-  // Content
+  // Semantic information
   text?: string;
   value?: string;
-  href?: string; // for links
   
-  // Data attributes (for testing)
-  dataTestId?: string;
-  dataCy?: string;
-  
-  // Visual properties
-  boundingRect?: {
+  // Visual context (simplified)
+  boundingBox?: {
     x: number;
     y: number;
     width: number;
     height: number;
-    top: number;
-    right: number;
-    bottom: number;
-    left: number;
   };
-  isVisible?: boolean;
   
-  // Computed properties
-  isInteractive?: boolean; // Is this element clickable/interactive?
-  interactiveParent?: ElementTarget; // If clicked element is non-interactive, this is the interactive parent
+  // Context and state
+  parentSelector?: string;
+  isDisabled?: boolean;
+  
+  // All element attributes (for reliable element identification)
+  attributes: Record<string, string>;
+  
+  // NEW: Position information for precise matching
+  elementIndex?: number; // Index among siblings (0-based)
+  siblingCount?: number; // Total number of siblings
 }
 
 export interface RecordedAction {
@@ -80,9 +53,13 @@ export interface RecordedAction {
   snapshotSize?: number; // Snapshot file size in bytes
 
   // Verification metadata (added by ActionRecorder)
-  verified?: boolean;
-  verificationTime?: number;
-  effects?: ClickEffects;
+  // verified?: boolean;
+  // verificationTime?: number;
+  // effects?: ClickEffects;
+  
+  // LLM-friendly context (optional, can be added during analysis)
+  intent?: string; // What the user was trying to do (e.g., "Enter username", "Submit form")
+  expectedOutcome?: string; // What should happen (e.g., "Navigate to dashboard", "Show success message")
 }
 
 /**
@@ -217,4 +194,9 @@ export interface RecordingSession {
   snapshotCount?: number; // Number of snapshots captured
   snapshotsDirectory?: string; // Directory containing all snapshots for this session
   totalSnapshotSize?: number; // Total size of all snapshots in bytes
+  
+  // LLM-friendly workflow context (optional, added during export/analysis)
+  workflowSummary?: string; // High-level description of what was accomplished
+  keyMilestones?: string[]; // Important steps (e.g., "Logged in", "Filled form", "Submitted")
+  finalOutcome?: string; // What was achieved (e.g., "Repository created successfully")
 }

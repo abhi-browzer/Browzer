@@ -38,6 +38,7 @@ export interface BrowserAPI {
   deleteRecording: (id: string) => Promise<boolean>;
   isRecording: () => Promise<boolean>;
   getRecordedActions: () => Promise<any[]>;
+  exportRecording: (id: string) => Promise<{ success: boolean; filePath?: string; error?: string; cancelled?: boolean }>;
   
   // Video File Operations
   openVideoFile: (videoPath: string) => Promise<void>;
@@ -85,12 +86,20 @@ export interface BrowserAPI {
   getMostVisited: (limit?: number) => Promise<HistoryEntry[]>;
   getRecentlyVisited: (limit?: number) => Promise<HistoryEntry[]>;
 
-  // Automation Management
-  initializeAutomation: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
-  executeAutomation: (request: any) => Promise<any>;
-  generateAutomationPlan: (userPrompt: string, recordingSession: any) => Promise<any>;
-  getAutomationStatus: () => Promise<any>;
-  cancelAutomation: () => Promise<{ success: boolean }>;
+  // LLM Automation
+  executeLLMAutomation: (userGoal: string, recordedSessionId: string) => Promise<{
+    success: boolean;
+    sessionId: string;
+    message: string;
+  }>;
+  
+  // Session Management
+  loadAutomationSession: (sessionId: string) => Promise<any>;
+  getAutomationSessionHistory: (limit?: number) => Promise<any[]>;
+  getAutomationSessions: () => Promise<any[]>;
+  getAutomationSessionDetails: (sessionId: string) => Promise<any>;
+  resumeAutomationSession: (sessionId: string) => Promise<any>;
+  deleteAutomationSession: (sessionId: string) => Promise<boolean>;
 
   // Event listeners
   onTabsUpdated: (callback: (data: { tabs: TabInfo[]; activeTabId: string | null }) => void) => () => void;
@@ -99,7 +108,12 @@ export interface BrowserAPI {
   onRecordingStopped: (callback: (data: { actions: any[]; duration: number; startUrl: string }) => void) => () => void;
   onRecordingSaved: (callback: (session: any) => void) => () => void;
   onRecordingDeleted: (callback: (id: string) => void) => () => void;
-  onAutomationProgress: (callback: (data: any) => void) => () => void;
+  onRecordingMaxActionsReached: (callback: () => void) => () => void;
+  
+  // Automation event listeners
+  onAutomationProgress: (callback: (data: { sessionId: string; event: any }) => void) => () => void;
+  onAutomationComplete: (callback: (data: { sessionId: string; result: any }) => void) => () => void;
+  onAutomationError: (callback: (data: { sessionId: string; error: string }) => void) => () => void;
 }
 
 // Expose protected methods that allow the renderer process to use
@@ -132,6 +146,7 @@ const browserAPI: BrowserAPI = {
   deleteRecording: (id: string) => ipcRenderer.invoke('browser:delete-recording', id),
   isRecording: () => ipcRenderer.invoke('browser:is-recording'),
   getRecordedActions: () => ipcRenderer.invoke('browser:get-recorded-actions'),
+  exportRecording: (id: string) => ipcRenderer.invoke('browser:export-recording', id),
 
   onTabsUpdated: (callback) => {
     const subscription = (_event: Electron.IpcRendererEvent, data: { tabs: TabInfo[]; activeTabId: string | null }) => callback(data);
@@ -171,6 +186,12 @@ const browserAPI: BrowserAPI = {
     const subscription = (_event: Electron.IpcRendererEvent, id: string) => callback(id);
     ipcRenderer.on('recording:deleted', subscription);
     return () => ipcRenderer.removeListener('recording:deleted', subscription);
+  },
+
+  onRecordingMaxActionsReached: (callback) => {
+    const subscription = () => callback();
+    ipcRenderer.on('recording:max-actions-reached', subscription);
+    return () => ipcRenderer.removeListener('recording:max-actions-reached', subscription);
   },
 
   // Settings API
@@ -243,22 +264,39 @@ const browserAPI: BrowserAPI = {
   isSiteBlacklisted: (origin: string) => 
     ipcRenderer.invoke('password:is-blacklisted', origin),
 
-  // Automation API
-  initializeAutomation: (apiKey: string) => 
-    ipcRenderer.invoke('automation:initialize', apiKey),
-  executeAutomation: (request: any) => 
-    ipcRenderer.invoke('automation:execute', request),
-  generateAutomationPlan: (userPrompt: string, recordingSession: any) => 
-    ipcRenderer.invoke('automation:generate-plan', userPrompt, recordingSession),
-  getAutomationStatus: () => 
-    ipcRenderer.invoke('automation:get-status'),
-  cancelAutomation: () => 
-    ipcRenderer.invoke('automation:cancel'),
-
+  // LLM Automation API
+  executeLLMAutomation: (userGoal: string, recordedSessionId: string) =>
+    ipcRenderer.invoke('automation:execute-llm', userGoal, recordedSessionId),
+  
+  // Session Management API
+  loadAutomationSession: (sessionId: string) =>
+    ipcRenderer.invoke('automation:load-session', sessionId),
+  getAutomationSessionHistory: (limit?: number) =>
+    ipcRenderer.invoke('automation:get-session-history', limit),
+  getAutomationSessions: () =>
+    ipcRenderer.invoke('automation:get-sessions'),
+  getAutomationSessionDetails: (sessionId: string) =>
+    ipcRenderer.invoke('automation:get-session-details', sessionId),
+  resumeAutomationSession: (sessionId: string) =>
+    ipcRenderer.invoke('automation:resume-session', sessionId),
+  deleteAutomationSession: (sessionId: string) =>
+    ipcRenderer.invoke('automation:delete-session', sessionId),
+  
+  // Automation event listeners
   onAutomationProgress: (callback) => {
-    const subscription = (_event: Electron.IpcRendererEvent, data: any) => callback(data);
+    const subscription = (_: any, data: any) => callback(data);
     ipcRenderer.on('automation:progress', subscription);
     return () => ipcRenderer.removeListener('automation:progress', subscription);
+  },
+  onAutomationComplete: (callback) => {
+    const subscription = (_: any, data: any) => callback(data);
+    ipcRenderer.on('automation:complete', subscription);
+    return () => ipcRenderer.removeListener('automation:complete', subscription);
+  },
+  onAutomationError: (callback) => {
+    const subscription = (_: any, data: any) => callback(data);
+    ipcRenderer.on('automation:error', subscription);
+    return () => ipcRenderer.removeListener('automation:error', subscription);
   },
 };
 
