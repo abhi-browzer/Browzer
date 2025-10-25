@@ -294,7 +294,6 @@ export class ActionRecorder {
           
           return {
             selector: selectorStrategies.primary,
-            backupSelectors: selectorStrategies.backups,
             tagName: element.tagName,
             text: (element.innerText || element.textContent || '').substring(0, 200).trim() || undefined,
             value: element.value || undefined,
@@ -315,7 +314,7 @@ export class ActionRecorder {
         
         /**
          * Generate multiple selector strategies for maximum reliability
-         * Returns primary selector + backup selectors using different approaches
+         * Returns primary selectors using different approaches
          */
         function generateMultipleSelectorStrategies(element) {
           const strategies = [];
@@ -380,7 +379,6 @@ export class ActionRecorder {
           
           return {
             primary: uniqueStrategies[0] || element.tagName.toLowerCase(),
-            backups: uniqueStrategies.slice(1, 6) // Max 5 backup selectors
           };
         }
         

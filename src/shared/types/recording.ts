@@ -8,8 +8,6 @@ export interface ElementTarget {
   selector: string;
   tagName: string;
   
-  // NEW: Multiple backup selectors for maximum reliability
-  backupSelectors?: string[];
   
   // Semantic information
   text?: string;

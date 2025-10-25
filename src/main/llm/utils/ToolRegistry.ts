@@ -25,7 +25,6 @@ export const BROWSER_AUTOMATION_TOOLS: Anthropic.Tool[] = [
 - Use when you need to analyze results before continuing
 - Use when plan ends with extract_context or take_snapshot
 - Use when you need to make decisions based on current state
-- Use when testing/verifying tools (as requested by user)
 - System will execute the plan, return results, and ask for next plan
 
 **FINAL PLAN:**
@@ -113,7 +112,7 @@ export const BROWSER_AUTOMATION_TOOLS: Anthropic.Tool[] = [
 - No need to scroll manually before clicking
 
 🔄 BACKUP SELECTORS:
-- ALWAYS provide 2-3 backup selectors
+- ALWAYS provide as many VALID backup selectors as possible
 - Use different strategies for each backup
 - Example: [#submit, button[type="submit"], [aria-label="Submit"]]
 - **USE BACKUP SELECTORS FROM RECORDING**: The recorded session includes pre-generated backup selectors - use them!`,
@@ -133,7 +132,7 @@ DO NOT use: :has-text(), :visible, :contains(), or any Playwright/jQuery syntax`
         },
         backupSelectors: {
           type: 'array',
-          description: `REQUIRED: at least 2-3 backup selectors using different strategies. Examples:
+          description: `REQUIRED: Provide as many VALID backup selectors as possible using different strategies. Examples:
 ["button[type='submit']", "[aria-label='Submit']", "form button.primary"]
 ["#login-btn", "button[name='login']", "[data-testid='login-button']"]`,
           items: { type: 'string' }
@@ -195,7 +194,7 @@ DO NOT use: :has-text(), :visible, :contains(), or any Playwright/jQuery syntax`
 - For search boxes: set pressEnter: true
 - For form fields: set pressEnter: false, use submit or click submit button
 - For single-field forms: pressEnter: true
-- Always provide 2-3 backup selectors
+- Always provide VALID backup selectors
 - Use waitForElement: 2000-2500 for dynamically loaded forms`,
     input_schema: {
       type: 'object',
@@ -213,7 +212,7 @@ IMPORTANT: Don't assume name attribute exists. Modern sites often use id, data-*
         },
         backupSelectors: {
           type: 'array',
-          description: `REQUIRED: at least 2 backup selectors. Use different attribute types. Examples:
+          description: `REQUIRED: at least as many VALID backup selectors as possible. Use different attribute types. Examples:
 ["input[placeholder='Username']", "input[type='text']", "[aria-label='Username']"]
 ["#email", "input[name='email']", "input[type='email']"]`,
           items: { type: 'string' }

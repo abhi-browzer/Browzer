@@ -251,7 +251,8 @@ export class TypeHandler extends BaseHandler {
   }
 
   /**
-   * Perform robust typing using CDP key events + comprehensive event simulation
+   * ENHANCED: Perform robust typing using CDP key events with PROPER modifier support
+   * Handles special characters like @, #, $, etc. that require Shift key
    * This properly triggers React/Vue state updates and all validation events
    */
   private async performRobustTyping(
@@ -262,25 +263,52 @@ export class TypeHandler extends BaseHandler {
     try {
       for (let i = 0; i < text.length; i++) {
         const char = text[i];
+        const keyInfo = this.getKeyInfo(char);
         
-        // Send keyDown event
+        // CRITICAL: Press Shift key first if needed (for @, #, $, etc.)
+        if (keyInfo.needsShift) {
+          await this.debugger.sendCommand('Input.dispatchKeyEvent', {
+            type: 'keyDown',
+            key: 'Shift',
+            code: 'ShiftLeft',
+            windowsVirtualKeyCode: 16,
+            nativeVirtualKeyCode: 16,
+            modifiers: 8 // Shift modifier
+          });
+        }
+        
+        // Send keyDown event with proper modifiers
         await this.debugger.sendCommand('Input.dispatchKeyEvent', {
           type: 'keyDown',
           text: char,
-          key: char,
-          code: this.getKeyCodeString(char),
-          windowsVirtualKeyCode: char.charCodeAt(0),
-          nativeVirtualKeyCode: char.charCodeAt(0)
+          key: keyInfo.key,
+          code: keyInfo.code,
+          windowsVirtualKeyCode: keyInfo.keyCode,
+          nativeVirtualKeyCode: keyInfo.keyCode,
+          modifiers: keyInfo.needsShift ? 8 : 0 // 8 = Shift modifier
         });
 
         // Send keyUp event
         await this.debugger.sendCommand('Input.dispatchKeyEvent', {
           type: 'keyUp',
-          key: char,
-          code: this.getKeyCodeString(char),
-          windowsVirtualKeyCode: char.charCodeAt(0),
-          nativeVirtualKeyCode: char.charCodeAt(0)
+          key: keyInfo.key,
+          code: keyInfo.code,
+          windowsVirtualKeyCode: keyInfo.keyCode,
+          nativeVirtualKeyCode: keyInfo.keyCode,
+          modifiers: keyInfo.needsShift ? 8 : 0
         });
+        
+        // Release Shift key if it was pressed
+        if (keyInfo.needsShift) {
+          await this.debugger.sendCommand('Input.dispatchKeyEvent', {
+            type: 'keyUp',
+            key: 'Shift',
+            code: 'ShiftLeft',
+            windowsVirtualKeyCode: 16,
+            nativeVirtualKeyCode: 16,
+            modifiers: 0
+          });
+        }
 
         // Reset React value tracker if present
         await this.view.webContents.executeJavaScript(`
@@ -344,56 +372,93 @@ export class TypeHandler extends BaseHandler {
   }
 
   /**
-   * Get proper key code string for character (for CDP code property)
+   * PRODUCTION-GRADE: Get complete key information including modifiers
+   * Properly handles special characters that require Shift key
    */
-  private getKeyCodeString(char: string): string {
-    // Letters
-    if (/[a-zA-Z]/.test(char)) {
-      return 'Key' + char.toUpperCase();
+  private getKeyInfo(char: string): { key: string; code: string; keyCode: number; needsShift: boolean } {
+    // Uppercase letters need Shift
+    if (/[A-Z]/.test(char)) {
+      return {
+        key: char,
+        code: 'Key' + char,
+        keyCode: char.charCodeAt(0),
+        needsShift: true
+      };
     }
     
-    // Numbers
+    // Lowercase letters don't need Shift
+    if (/[a-z]/.test(char)) {
+      return {
+        key: char,
+        code: 'Key' + char.toUpperCase(),
+        keyCode: char.charCodeAt(0),
+        needsShift: false
+      };
+    }
+    
+    // Numbers don't need Shift
     if (/[0-9]/.test(char)) {
-      return 'Digit' + char;
+      return {
+        key: char,
+        code: 'Digit' + char,
+        keyCode: char.charCodeAt(0),
+        needsShift: false
+      };
     }
     
-    // Special characters
-    const specialKeys: Record<string, string> = {
-      ' ': 'Space',
-      '-': 'Minus',
-      '_': 'Underscore',
-      '=': 'Equal',
-      '+': 'Plus',
-      '[': 'BracketLeft',
-      ']': 'BracketRight',
-      '{': 'BraceLeft',
-      '}': 'BraceRight',
-      '\\': 'Backslash',
-      '|': 'Pipe',
-      ';': 'Semicolon',
-      ':': 'Colon',
-      "'": 'Quote',
-      '"': 'DoubleQuote',
-      ',': 'Comma',
-      '.': 'Period',
-      '/': 'Slash',
-      '?': 'Question',
-      '<': 'Less',
-      '>': 'Greater',
-      '`': 'Backquote',
-      '~': 'Tilde',
-      '!': 'Exclamation',
-      '@': 'At',
-      '#': 'Hash',
-      '$': 'Dollar',
-      '%': 'Percent',
-      '^': 'Caret',
-      '&': 'Ampersand',
-      '*': 'Asterisk',
-      '(': 'ParenLeft',
-      ')': 'ParenRight'
+    // Special characters mapping with Shift requirement
+    // Key format: { key: display character, code: physical key, keyCode: virtual key code, needsShift: boolean }
+    const specialChars: Record<string, { key: string; code: string; keyCode: number; needsShift: boolean }> = {
+      // Characters that DON'T need Shift
+      ' ': { key: ' ', code: 'Space', keyCode: 32, needsShift: false },
+      '-': { key: '-', code: 'Minus', keyCode: 189, needsShift: false },
+      '=': { key: '=', code: 'Equal', keyCode: 187, needsShift: false },
+      '[': { key: '[', code: 'BracketLeft', keyCode: 219, needsShift: false },
+      ']': { key: ']', code: 'BracketRight', keyCode: 221, needsShift: false },
+      '\\': { key: '\\', code: 'Backslash', keyCode: 220, needsShift: false },
+      ';': { key: ';', code: 'Semicolon', keyCode: 186, needsShift: false },
+      "'": { key: "'", code: 'Quote', keyCode: 222, needsShift: false },
+      ',': { key: ',', code: 'Comma', keyCode: 188, needsShift: false },
+      '.': { key: '.', code: 'Period', keyCode: 190, needsShift: false },
+      '/': { key: '/', code: 'Slash', keyCode: 191, needsShift: false },
+      '`': { key: '`', code: 'Backquote', keyCode: 192, needsShift: false },
+      
+      // Characters that NEED Shift (Shift + number keys)
+      '!': { key: '!', code: 'Digit1', keyCode: 49, needsShift: true },  // Shift+1
+      '@': { key: '@', code: 'Digit2', keyCode: 50, needsShift: true },  // Shift+2 (CRITICAL FIX!)
+      '#': { key: '#', code: 'Digit3', keyCode: 51, needsShift: true },  // Shift+3
+      '$': { key: '$', code: 'Digit4', keyCode: 52, needsShift: true },  // Shift+4
+      '%': { key: '%', code: 'Digit5', keyCode: 53, needsShift: true },  // Shift+5
+      '^': { key: '^', code: 'Digit6', keyCode: 54, needsShift: true },  // Shift+6
+      '&': { key: '&', code: 'Digit7', keyCode: 55, needsShift: true },  // Shift+7
+      '*': { key: '*', code: 'Digit8', keyCode: 56, needsShift: true },  // Shift+8
+      '(': { key: '(', code: 'Digit9', keyCode: 57, needsShift: true },  // Shift+9
+      ')': { key: ')', code: 'Digit0', keyCode: 48, needsShift: true },  // Shift+0
+      
+      // Characters that NEED Shift (Shift + symbol keys)
+      '_': { key: '_', code: 'Minus', keyCode: 189, needsShift: true },      // Shift+-
+      '+': { key: '+', code: 'Equal', keyCode: 187, needsShift: true },      // Shift+=
+      '{': { key: '{', code: 'BracketLeft', keyCode: 219, needsShift: true }, // Shift+[
+      '}': { key: '}', code: 'BracketRight', keyCode: 221, needsShift: true }, // Shift+]
+      '|': { key: '|', code: 'Backslash', keyCode: 220, needsShift: true },  // Shift+\
+      ':': { key: ':', code: 'Semicolon', keyCode: 186, needsShift: true },  // Shift+;
+      '"': { key: '"', code: 'Quote', keyCode: 222, needsShift: true },     // Shift+'
+      '<': { key: '<', code: 'Comma', keyCode: 188, needsShift: true },     // Shift+,
+      '>': { key: '>', code: 'Period', keyCode: 190, needsShift: true },    // Shift+.
+      '?': { key: '?', code: 'Slash', keyCode: 191, needsShift: true },     // Shift+/
+      '~': { key: '~', code: 'Backquote', keyCode: 192, needsShift: true }  // Shift+`
     };
     
-    return specialKeys[char] || 'Unidentified';
+    if (specialChars[char]) {
+      return specialChars[char];
+    }
+    
+    // Fallback for unknown characters
+    return {
+      key: char,
+      code: 'Unidentified',
+      keyCode: char.charCodeAt(0),
+      needsShift: false
+    };
   }
 }
