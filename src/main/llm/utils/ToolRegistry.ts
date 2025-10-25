@@ -116,14 +116,7 @@ export const BROWSER_AUTOMATION_TOOLS: Anthropic.Tool[] = [
 - ALWAYS provide 2-3 backup selectors
 - Use different strategies for each backup
 - Example: [#submit, button[type="submit"], [aria-label="Submit"]]
-- **USE BACKUP SELECTORS FROM RECORDING**: The recorded session includes pre-generated backup selectors - use them!
-
-📍 BOUNDING BOX (Position-Based Clicking):
-- The recording includes exact pixel coordinates where user clicked
-- Provide boundingBox parameter for elements with STATIC positions
-- System will use position + text + selectors for BEST MATCH scoring
-- Perfect for: buttons, links, menu items in fixed positions
-- Example: { x: 202, y: 14, width: 28, height: 28 }`,
+- **USE BACKUP SELECTORS FROM RECORDING**: The recorded session includes pre-generated backup selectors - use them!`,
     input_schema: {
       type: 'object',
       properties: {
@@ -148,16 +141,6 @@ DO NOT use: :has-text(), :visible, :contains(), or any Playwright/jQuery syntax`
         text: {
           type: 'string',
           description: 'Expected button/link text for verification. Used to find element by text if selectors fail. Example: "Send invitation", "Create repository"'
-        },
-        boundingBox: {
-          type: 'object',
-          description: 'Element position from browser context. Used as fallback if selectors fail.',
-          properties: {
-            x: { type: 'number', description: 'Left position in pixels' },
-            y: { type: 'number', description: 'Top position in pixels' },
-            width: { type: 'number', description: 'Width in pixels' },
-            height: { type: 'number', description: 'Height in pixels' }
-          }
         },
         waitForElement: {
           type: 'number',

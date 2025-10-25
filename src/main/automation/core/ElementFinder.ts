@@ -70,6 +70,7 @@ export class ElementFinder extends BaseHandler {
     if (secondBest && Math.abs(bestMatch.score - secondBest.score) < 10) {
       console.warn(`[ElementFinder] ⚠️ Multiple similar matches found! Scores are close. Using best match but this may be ambiguous.`);
     }
+    console.log("scoredCandidates: ", scoredCandidates);
 
     return {
       success: true,
@@ -148,7 +149,7 @@ export class ElementFinder extends BaseHandler {
   }
 
   /**
-   * NEW: Score elements based on multiple criteria
+   * ENHANCED: Score elements based on multiple criteria with uniqueness detection
    * Returns scored candidates with breakdown
    */
   private async scoreElements(
@@ -246,6 +247,15 @@ export class ElementFinder extends BaseHandler {
         breakdown.attributeMatch = attrScore;
       }
 
+      const selectorSpecificity = this.calculateSelectorSpecificity(candidate.selector);
+      score += selectorSpecificity;
+      breakdown.specificity = selectorSpecificity;
+
+      if (candidate.element.isInViewport) {
+        score += 5;
+        breakdown.inViewport = 5;
+      }
+
       scored.push({
         ...candidate,
         score,
@@ -253,7 +263,59 @@ export class ElementFinder extends BaseHandler {
       });
     }
 
+    const textGroups = new Map<string, typeof scored>();
+    for (const candidate of scored) {
+      const text = candidate.element.text?.toLowerCase().trim() || '';
+      if (!textGroups.has(text)) {
+        textGroups.set(text, []);
+      }
+      textGroups.get(text)!.push(candidate);
+    }
+
+    for (const [text, group] of textGroups) {
+      if (group.length > 1 && text) {
+        console.warn(`[ElementFinder] ⚠️ Found ${group.length} elements with text "${text}" - using specificity to disambiguate`);
+        
+        const maxSpecificity = Math.max(...group.map(c => c.breakdown.specificity || 0));
+        
+        for (const candidate of group) {
+          const specificity = candidate.breakdown.specificity || 0;
+          if (specificity < maxSpecificity) {
+            const penalty = (maxSpecificity - specificity) * 2; // 2x penalty
+            candidate.score -= penalty;
+            candidate.breakdown.ambiguityPenalty = -penalty;
+          }
+        }
+      }
+    }
+
     return scored;
+  }
+
+  /**
+   * Calculate selector specificity score (higher = more specific)
+   * Helps disambiguate when multiple elements match
+   */
+  private calculateSelectorSpecificity(selector: string): number {
+    let score = 0;
+    
+    if (selector.includes('#')) score += 20;
+    
+    if (selector.includes('[data-')) score += 15;
+    
+    if (selector.includes('[aria-')) score += 12;
+    
+    if (selector.includes('[name=') || selector.includes('[type=')) score += 8;
+    
+    const classCount = (selector.match(/\./g) || []).length;
+    score += Math.min(classCount * 3, 15);
+    
+    const childCombinators = (selector.match(/>/g) || []).length;
+    score += Math.min(childCombinators * 2, 10);
+    
+    if (selector.includes(':nth-')) score += 10;
+    
+    return score;
   }
 
   /**

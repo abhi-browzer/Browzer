@@ -529,9 +529,8 @@ ${errorInfo.suggestions ? `- Suggestions: ${errorInfo.suggestions.join(', ')}` :
 ${currentUrl ? `- Current URL: ${currentUrl}` : '- URL unknown'}
 
 **Your Task:**
-1. First, use extract_browser_context to understand the current page state
-2. Analyze what went wrong and why
-3. Generate a NEW complete automation plan that:
+1. Analyze what went wrong and why, you may use the analysis tools (extract_context, & take_snapshot)
+2. Generate a NEW complete automation plan that:
    - Starts from the CURRENT state (don't repeat successful steps)
    - Completes the remaining work to achieve the goal
    - Uses correct selectors based on browser context

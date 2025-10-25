@@ -29,7 +29,7 @@ export class ContextWindowManager {
   // Token limits
   private static readonly MAX_TOTAL_TOKENS = 200_000;
   private static readonly SYSTEM_AND_TOOLS_TOKENS = 40_000; // Reserved for system + tools
-  private static readonly TARGET_MESSAGE_TOKENS = 150_000; // Target to stay under
+  private static readonly TARGET_MESSAGE_TOKENS = 140_000; // Target to stay under
 
   // Sliding window configuration
   private static readonly RECENT_TURNS_TO_KEEP = 10; // Keep last 10 conversation turns in full
