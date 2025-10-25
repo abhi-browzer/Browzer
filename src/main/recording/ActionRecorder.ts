@@ -2,14 +2,17 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { WebContentsView } from "electron";
 import { RecordedAction } from '@/shared/types';
+import { MAX_RECORDING_ACTIONS } from '@/shared/constants/limits';
 import { SnapshotManager } from './SnapshotManager';
 
 export class ActionRecorder {
+  private static readonly MAX_ACTIONS = MAX_RECORDING_ACTIONS;
   private view: WebContentsView | null = null;
   private isRecording = false;
   private actions: RecordedAction[] = [];
   private debugger: Electron.Debugger | null = null;
   public onActionCallback?: (action: RecordedAction) => void;
+  public onMaxActionsReached?: () => void; // Callback when max actions reached
   private snapshotManager: SnapshotManager;
 
   // Tab context for current recording
@@ -47,6 +50,13 @@ export class ActionRecorder {
    */
   public setActionCallback(callback: (action: RecordedAction) => void): void {
     this.onActionCallback = callback;
+  }
+
+  /**
+   * Set callback for when max actions limit is reached
+   */
+  public setMaxActionsCallback(callback: () => void): void {
+    this.onMaxActionsReached = callback;
   }
 
   /**
@@ -903,6 +913,15 @@ export class ActionRecorder {
     const shouldVerifyImmediately = immediateVerificationTypes.includes(actionData.type);
     
     if (shouldVerifyImmediately) {
+      // Check if max actions limit reached
+      if (this.actions.length >= ActionRecorder.MAX_ACTIONS) {
+        console.warn(`⚠️ Max actions limit (${ActionRecorder.MAX_ACTIONS}) reached, stopping recording`);
+        if (this.onMaxActionsReached) {
+          this.onMaxActionsReached();
+        }
+        return;
+      }
+      
       // Verify immediately and record
       enrichedAction.verified = true;
       enrichedAction.verificationTime = 0;
@@ -917,7 +936,7 @@ export class ActionRecorder {
       }
       
       this.actions.push(enrichedAction);
-      console.log(`✅ Action immediately verified: ${actionData.type}`);
+      console.log(`✅ Action immediately verified: ${actionData.type} (${this.actions.length}/${ActionRecorder.MAX_ACTIONS})`);
       if (this.onActionCallback) {
         this.onActionCallback(enrichedAction);
       }
@@ -945,6 +964,16 @@ export class ActionRecorder {
     const pending = this.pendingActions.get(actionId);
     if (!pending) return;
     
+    // Check if max actions limit reached
+    if (this.actions.length >= ActionRecorder.MAX_ACTIONS) {
+      console.warn(`⚠️ Max actions limit (${ActionRecorder.MAX_ACTIONS}) reached, stopping recording`);
+      this.pendingActions.delete(actionId);
+      if (this.onMaxActionsReached) {
+        this.onMaxActionsReached();
+      }
+      return;
+    }
+    
     const { action, timestamp } = pending;
     const preClickState = action.metadata?.preClickState;
     const effects = await this.detectClickEffects(timestamp, preClickState);
@@ -965,6 +994,7 @@ export class ActionRecorder {
     }
     
     this.actions.push(verifiedAction);
+    console.log(`✅ Action verified: ${action.type} (${this.actions.length}/${ActionRecorder.MAX_ACTIONS})`);
     if (this.onActionCallback) {
       this.onActionCallback(verifiedAction);
     }
@@ -1144,6 +1174,15 @@ export class ActionRecorder {
    * Record navigation
    */
   private recordNavigation(url: string, timestamp?: number): void {
+    // Check if max actions limit reached
+    if (this.actions.length >= ActionRecorder.MAX_ACTIONS) {
+      console.warn(`⚠️ Max actions limit (${ActionRecorder.MAX_ACTIONS}) reached, skipping navigation`);
+      if (this.onMaxActionsReached) {
+        this.onMaxActionsReached();
+      }
+      return;
+    }
+    
     const action: RecordedAction = {
       type: 'navigate',
       timestamp: timestamp || Date.now(),

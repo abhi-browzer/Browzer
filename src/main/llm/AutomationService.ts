@@ -287,6 +287,16 @@ export class AutomationService extends EventEmitter {
 
       const stepResult = await this.planExecutor.executeStep(step, stepNumber, totalSteps);
 
+      // Handle max steps reached - stop automation immediately
+      if (stepResult.maxStepsReached) {
+        console.log('🛑 Max steps limit reached, stopping automation');
+        return { 
+          success: false, 
+          isComplete: true, 
+          error: stepResult.error || 'Maximum execution steps limit reached'
+        };
+      }
+
       // Handle step failure - trigger error recovery
       if (!stepResult.success) {
         const recoveryResult = await this.errorRecoveryHandler.handleError(step, stepResult.result);

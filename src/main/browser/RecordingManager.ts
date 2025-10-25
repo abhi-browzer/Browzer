@@ -82,6 +82,16 @@ export class RecordingManager {
           }
         }
       });
+      
+      // Set up max actions callback to auto-stop recording
+      // Note: The actual stopRecording will be called from BrowserManager with tabs map
+      this.centralRecorder.setMaxActionsCallback(() => {
+        console.log('🛑 Max actions limit reached, triggering auto-stop');
+        // Notify renderer to show save form immediately
+        if (this.agentUIView && !this.agentUIView.webContents.isDestroyed()) {
+          this.agentUIView.webContents.send('recording:max-actions-reached');
+        }
+      });
 
       // Start action recording with tab context and recordingId for snapshots
       await this.centralRecorder.startRecording(
