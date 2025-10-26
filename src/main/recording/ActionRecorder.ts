@@ -762,7 +762,7 @@ export class ActionRecorder {
         }, true);
         document.addEventListener('keydown', (e) => {
           const importantKeys = [
-            'Enter', 'Escape', 'Tab', 'Backspace', 'Delete',
+            'Enter', 'Escape', 'Tab',
             'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
             'Home', 'End', 'PageUp', 'PageDown'
           ];
