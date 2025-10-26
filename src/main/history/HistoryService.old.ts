@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import { app } from 'electron';
 import path from 'path';
 import { randomUUID } from 'crypto';
-import { HistoryEntry, HistoryTransition, HistoryQuery, HistoryStats } from '@/shared/types';
+import { HistoryEntry, HistoryTransition, HistoryQuery, HistoryStats } from '../../shared/types';
 
 /**
  * HistoryService
@@ -20,6 +20,7 @@ import { HistoryEntry, HistoryTransition, HistoryQuery, HistoryStats } from '@/s
  */
 export class HistoryService {
   private db: Database.Database;
+  private readonly DB_VERSION = 1;
 
   // Prepared statements for better performance
   private stmts: {
@@ -79,67 +80,99 @@ export class HistoryService {
    * Initialize database schema with proper indexes
    */
   private initializeDatabase(): void {
-    try {
-      // Create version table
-      this.db.exec(`
-        CREATE TABLE IF NOT EXISTS schema_version (
-          version INTEGER PRIMARY KEY,
-          applied_at INTEGER NOT NULL
-        );
-      `);
+    // Create version table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS schema_version (
+        version INTEGER PRIMARY KEY,
+        applied_at INTEGER NOT NULL
+      );
+    `);
 
-      // Create main history entries table
-      this.db.exec(`
-        CREATE TABLE IF NOT EXISTS history_entries (
-          id TEXT PRIMARY KEY,
-          url TEXT NOT NULL UNIQUE,
-          title TEXT NOT NULL,
-          visit_time INTEGER NOT NULL,
-          visit_count INTEGER NOT NULL DEFAULT 1,
-          last_visit_time INTEGER NOT NULL,
-          favicon TEXT,
-          typed_count INTEGER NOT NULL DEFAULT 0,
-          transition TEXT NOT NULL
-        );
+    const currentVersion = this.getDatabaseVersion();
 
-        -- Indexes for fast lookups
-        CREATE INDEX IF NOT EXISTS idx_url ON history_entries(url);
-        CREATE INDEX IF NOT EXISTS idx_last_visit_time ON history_entries(last_visit_time DESC);
-        CREATE INDEX IF NOT EXISTS idx_visit_count ON history_entries(visit_count DESC);
-        CREATE INDEX IF NOT EXISTS idx_title ON history_entries(title);
-        CREATE INDEX IF NOT EXISTS idx_visit_time ON history_entries(visit_time DESC);
-
-        -- Full-text search virtual table
-        CREATE VIRTUAL TABLE IF NOT EXISTS history_fts USING fts5(
-          id UNINDEXED,
-          url,
-          title,
-          content='history_entries',
-          content_rowid='rowid'
-        );
-
-        -- Triggers to keep FTS table in sync
-        CREATE TRIGGER IF NOT EXISTS history_fts_insert AFTER INSERT ON history_entries BEGIN
-          INSERT INTO history_fts(rowid, id, url, title)
-          VALUES (new.rowid, new.id, new.url, new.title);
-        END;
-
-        CREATE TRIGGER IF NOT EXISTS history_fts_delete AFTER DELETE ON history_entries BEGIN
-          DELETE FROM history_fts WHERE rowid = old.rowid;
-        END;
-
-        CREATE TRIGGER IF NOT EXISTS history_fts_update AFTER UPDATE ON history_entries BEGIN
-          DELETE FROM history_fts WHERE rowid = old.rowid;
-          INSERT INTO history_fts(rowid, id, url, title)
-          VALUES (new.rowid, new.id, new.url, new.title);
-        END;
-      `);
-
-      console.log('Database schema initialized successfully');
-    } catch (error) {
-      console.error('Error initializing database schema:', error);
-      throw error;
+    if (currentVersion < this.DB_VERSION) {
+      this.runMigrations(currentVersion);
     }
+  }
+
+  /**
+   * Get current database version
+   */
+  private getDatabaseVersion(): number {
+    const result = this.db.prepare('SELECT MAX(version) as version FROM schema_version').get() as { version: number | null };
+    return result?.version || 0;
+  }
+
+  /**
+   * Run database migrations
+   */
+  private runMigrations(fromVersion: number): void {
+    console.log(`Running migrations from version ${fromVersion} to ${this.DB_VERSION}`);
+
+    if (fromVersion < 1) {
+      this.migrateToV1();
+    }
+
+    // Add future migrations here
+    // if (fromVersion < 2) { this.migrateToV2(); }
+  }
+
+  /**
+   * Migration to version 1: Initial schema
+   */
+  private migrateToV1(): void {
+    console.log('Migrating to database version 1...');
+
+    this.db.exec(`
+      -- Main history entries table
+      CREATE TABLE IF NOT EXISTS history_entries (
+        id TEXT PRIMARY KEY,
+        url TEXT NOT NULL UNIQUE,
+        title TEXT NOT NULL,
+        visit_time INTEGER NOT NULL,
+        visit_count INTEGER NOT NULL DEFAULT 1,
+        last_visit_time INTEGER NOT NULL,
+        favicon TEXT,
+        typed_count INTEGER NOT NULL DEFAULT 0,
+        transition TEXT NOT NULL
+      );
+
+      -- Indexes for fast lookups
+      CREATE INDEX IF NOT EXISTS idx_url ON history_entries(url);
+      CREATE INDEX IF NOT EXISTS idx_last_visit_time ON history_entries(last_visit_time DESC);
+      CREATE INDEX IF NOT EXISTS idx_visit_count ON history_entries(visit_count DESC);
+      CREATE INDEX IF NOT EXISTS idx_title ON history_entries(title);
+      CREATE INDEX IF NOT EXISTS idx_visit_time ON history_entries(visit_time DESC);
+
+      -- Full-text search virtual table
+      CREATE VIRTUAL TABLE IF NOT EXISTS history_fts USING fts5(
+        id UNINDEXED,
+        url,
+        title,
+        content='history_entries',
+        content_rowid='rowid'
+      );
+
+      -- Triggers to keep FTS table in sync
+      CREATE TRIGGER IF NOT EXISTS history_fts_insert AFTER INSERT ON history_entries BEGIN
+        INSERT INTO history_fts(rowid, id, url, title)
+        VALUES (new.rowid, new.id, new.url, new.title);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS history_fts_delete AFTER DELETE ON history_entries BEGIN
+        DELETE FROM history_fts WHERE rowid = old.rowid;
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS history_fts_update AFTER UPDATE ON history_entries BEGIN
+        DELETE FROM history_fts WHERE rowid = old.rowid;
+        INSERT INTO history_fts(rowid, id, url, title)
+        VALUES (new.rowid, new.id, new.url, new.title);
+      END;
+    `);
+
+    // Record migration
+    this.db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(1, Date.now());
+    console.log('Migration to version 1 completed');
   }
 
   /**
