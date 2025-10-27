@@ -429,6 +429,54 @@ Letters: a, b, c (lowercase) or with Shift modifier for uppercase`
     }
   },
   {
+    name: 'fileUpload',
+    description: `Upload one or more files to a file input element.
+
+**IMPORTANT NOTES:**
+- This tool is for AUTOMATION PLAYBACK ONLY - it cannot be used during live recording
+- During recording, file uploads are captured with metadata but NOT the actual file paths (browser security)
+- File paths must be absolute paths on the system where automation runs
+- For recorded workflows, you'll need to provide actual file paths when replaying
+
+**USE CASES:**
+- Uploading documents, images, or other files during automation
+- Replaying recorded workflows that included file uploads
+- Batch file upload operations
+
+**SELECTOR GUIDANCE:**
+- Target: <input type="file"> elements
+- Use same selector strategies as click tool
+- Verify element has type="file" attribute
+
+**EXAMPLES:**
+- Single file: { "selector": "input[type='file']", "filePaths": "/Users/john/document.pdf" }
+- Multiple files: { "selector": "#file-upload", "filePaths": ["/path/file1.jpg", "/path/file2.jpg"] }
+- With backup: { "selector": "[data-testid='upload']", "backupSelectors": ["input[name='file']"], "filePaths": "/path/image.png" }`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        selector: {
+          type: 'string',
+          description: 'CSS selector for file input element. Must target <input type="file">. Examples: input[type="file"], #file-upload, [data-testid="file-input"]'
+        },
+        backupSelectors: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Backup CSS selectors to try if primary fails. Provide 2-4 alternatives.'
+        },
+        filePaths: {
+          description: 'Absolute file path(s) to upload. Can be a single string or array of strings for multiple files. Examples: "/Users/john/document.pdf" or ["/path/file1.jpg", "/path/file2.jpg"]'
+        },
+        waitForElement: {
+          type: 'number',
+          description: 'Wait time in milliseconds before attempting upload. Default: 1000',
+          default: 1000
+        }
+      },
+      required: ['selector', 'filePaths']
+    }
+  },
+  {
     name: 'extract_context',
     description: `Extract browser and DOM context for analysis and decision-making.
 

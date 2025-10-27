@@ -12,8 +12,16 @@ export default defineConfig({
     },
   },
   build: {
+    sourcemap: true,
+    minify: false,
     rollupOptions: {
       external: ['better-sqlite3'],
+      output: {
+        // Preserve module structure for better debugging
+        manualChunks: undefined,
+      },
     },
-  }
+  },
+  // Enable better error messages
+  clearScreen: false,
 });

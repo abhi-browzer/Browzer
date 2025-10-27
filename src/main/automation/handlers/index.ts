@@ -9,3 +9,4 @@ export { TypeHandler } from './TypeHandler';
 export { FormHandler } from './FormHandler';
 export { NavigationHandler } from './NavigationHandler';
 export { InteractionHandler } from './InteractionHandler';
+export { FileUploadHandler } from './FileUploadHandler';

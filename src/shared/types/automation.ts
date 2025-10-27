@@ -236,7 +236,10 @@ export interface AutomationError {
     | 'NAVIGATION_FAILED'
     | 'CDP_ERROR'
     | 'EXECUTION_ERROR'
-    | 'UNKNOWN_ERROR';
+    | 'UNKNOWN_ERROR'
+    | 'FILE_NOT_FOUND'
+    | 'INVALID_ELEMENT'
+    | 'UPLOAD_FAILED';
   message: string;
   details?: {
     attemptedSelectors?: string[]; // All selectors that were tried
@@ -248,6 +251,10 @@ export interface AutomationError {
       boundingBox?: { x: number; y: number; width: number; height: number };
     };
     suggestions?: string[]; // Suggestions for the model to retry
+    // File upload specific
+    attemptedPath?: string;
+    foundElement?: any;
+    error?: string;
   };
 }
 
@@ -264,6 +271,7 @@ export interface ToolExecutionResult {
   effects?: ExecutionEffects; // What happened after the action
   value?: any; // Return value (e.g., extracted text, attribute value)
   context?: any; // Return value (e.g., extracted text, attribute value)
+  metadata?: any; // Additional metadata (e.g., file upload info)
   
   // Error data
   error?: AutomationError;

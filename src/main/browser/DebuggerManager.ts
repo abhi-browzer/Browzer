@@ -28,7 +28,7 @@ export class DebuggerManager {
         cdpDebugger.sendCommand('DOM.enable'),
         cdpDebugger.sendCommand('Page.enable'),
         cdpDebugger.sendCommand('Runtime.enable'),
-        cdpDebugger.sendCommand('Network.enable'),
+        // cdpDebugger.sendCommand('Network.enable'),
         cdpDebugger.sendCommand('Console.enable'),
         cdpDebugger.sendCommand('Log.enable'),
       ]);

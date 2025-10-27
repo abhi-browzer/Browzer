@@ -33,6 +33,16 @@ export interface ElementTarget {
   siblingCount?: number; // Total number of siblings
 }
 
+/**
+ * File metadata for file upload actions
+ */
+export interface FileMetadata {
+  name: string;
+  size: number;
+  type: string;
+  lastModified: number;
+}
+
 export interface RecordedAction {
   type: 'click' | 'input' | 'navigate' | 'keypress' | 'submit' | 'select' | 'checkbox' | 'radio' | 'toggle' | 'file-upload' | 'tab-switch';
   timestamp: number;
@@ -40,7 +50,14 @@ export interface RecordedAction {
   value?: string | string[] | boolean;
   url?: string;
   position?: { x: number; y: number };
-  metadata?: Record<string, any>;
+  metadata?: {
+    // File upload specific metadata
+    files?: FileMetadata[];
+    mode?: string; // 'selectSingle' | 'selectMultiple'
+    multiple?: boolean;
+    // Generic metadata
+    [key: string]: any;
+  };
 
   // Multi-tab recording metadata
   tabId?: string;

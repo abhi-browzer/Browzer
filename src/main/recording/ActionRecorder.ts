@@ -21,6 +21,14 @@ export class ActionRecorder {
   private currentTabTitle: string | null = null;
   private currentWebContentsId: number | null = null;
 
+  // File upload tracking
+  private pendingFileChooser: {
+    backendNodeId?: number;
+    mode?: string;
+    timestamp: number;
+  } | null = null;
+  private fileUploadMap: Map<number, string[]> = new Map(); // Maps backendNodeId to file paths
+
 
 
   constructor(view?: WebContentsView) {
@@ -119,6 +127,8 @@ export class ActionRecorder {
       
       this.actions = [];
       this.isRecording = true;
+      this.fileUploadMap.clear();
+      this.pendingFileChooser = null;
 
       // Set initial tab context
       if (tabId && tabUrl && tabTitle) {
@@ -136,7 +146,7 @@ export class ActionRecorder {
       await this.injectEventTracker();
       this.setupEventListeners();
 
-      console.log('🎬 Recording started');
+      console.log('🎬 Recording started with file upload tracking');
     } catch (error) {
       console.error('Failed to start recording:', error);
       this.isRecording = false;
@@ -163,11 +173,13 @@ export class ActionRecorder {
       
       console.log(`⏹️ Recording stopped. Captured ${this.actions.length} actions`);
       
-      // Reset tab context
+      // Reset tab context and file upload tracking
       this.currentTabId = null;
       this.currentTabUrl = null;
       this.currentTabTitle = null;
       this.currentWebContentsId = null;
+      this.fileUploadMap.clear();
+      this.pendingFileChooser = null;
       
       return [...this.actions];
     } catch (error) {
@@ -849,6 +861,11 @@ export class ActionRecorder {
         await this.updateTabTitle();
         break;
 
+      case 'Page.fileChooserOpened':
+        // Intercept file chooser dialog to capture real file paths
+        await this.handleFileChooserOpened(params);
+        break;
+
       default:
         break;
     }
@@ -916,6 +933,161 @@ export class ActionRecorder {
     return !ignorePatterns.some(pattern => url.startsWith(pattern) || url.includes(pattern));
   }
 
+
+  /**
+   * Handle file chooser opened event from CDP
+   * This observes file chooser events but does NOT intercept them
+   * The native dialog opens normally, we just track it for recording
+   */
+  private async handleFileChooserOpened(params: any): Promise<void> {
+    try {
+      console.log('📁 File chooser opened (passive observation):', params);
+      
+      // Store pending file chooser info
+      this.pendingFileChooser = {
+        backendNodeId: params.backendNodeId,
+        mode: params.mode,
+        timestamp: Date.now()
+      };
+
+      // Get the file input element to extract selector info
+      let elementInfo: any = null;
+      if (params.backendNodeId && this.debugger) {
+        try {
+          const { object } = await this.debugger.sendCommand('DOM.resolveNode', {
+            backendNodeId: params.backendNodeId
+          });
+          
+          if (object && object.objectId) {
+            // Get element details
+            const result = await this.debugger.sendCommand('Runtime.callFunctionOn', {
+              objectId: object.objectId,
+              functionDeclaration: `
+                function() {
+                  const rect = this.getBoundingClientRect();
+                  const attributes = {};
+                  for (const attr of this.attributes) {
+                    attributes[attr.name] = attr.value;
+                  }
+                  
+                  // Generate selector
+                  let selector = this.tagName.toLowerCase();
+                  if (this.id) selector = '#' + this.id;
+                  else if (this.name) selector += '[name="' + this.name + '"]';
+                  else if (this.type) selector += '[type="' + this.type + '"]';
+                  
+                  return {
+                    selector: selector,
+                    tagName: this.tagName,
+                    attributes: attributes,
+                    boundingBox: {
+                      x: Math.round(rect.x),
+                      y: Math.round(rect.y),
+                      width: Math.round(rect.width),
+                      height: Math.round(rect.height)
+                    }
+                  };
+                }
+              `,
+              returnByValue: true
+            });
+            
+            if (result && result.result && result.result.value) {
+              elementInfo = result.result.value;
+            }
+          }
+        } catch (error) {
+          console.warn('Failed to get file input element info:', error);
+        }
+      }
+
+      // NOTE: We do NOT call Page.handleFileChooser - let the native dialog open normally
+      // Instead, we'll capture the file metadata after the user selects files
+      // This is done via the 'change' event listener in the injected script
+      
+      // Poll for file selection after dialog closes
+      const pollForFiles = async (attempt = 0) => {
+        if (attempt > 20) { // Max 10 seconds (20 * 500ms)
+          console.log('📁 File chooser timeout - user may have cancelled');
+          this.pendingFileChooser = null;
+          return;
+        }
+        
+        if (!this.pendingFileChooser || !params.backendNodeId || !this.debugger) {
+          return;
+        }
+        
+        try {
+          const { object } = await this.debugger.sendCommand('DOM.resolveNode', {
+            backendNodeId: params.backendNodeId
+          });
+          
+          if (object && object.objectId) {
+            const result = await this.debugger.sendCommand('Runtime.callFunctionOn', {
+              objectId: object.objectId,
+              functionDeclaration: `
+                function() {
+                  const files = Array.from(this.files || []);
+                  return files.map(f => ({
+                    name: f.name,
+                    size: f.size,
+                    type: f.type,
+                    lastModified: f.lastModified
+                  }));
+                }
+              `,
+              returnByValue: true
+            });
+            
+            if (result && result.result && result.result.value) {
+              const fileMetadata = result.result.value;
+              
+              // If files were selected, record the action
+              if (fileMetadata.length > 0) {
+                const action: RecordedAction = {
+                  type: 'file-upload',
+                  timestamp: this.pendingFileChooser.timestamp,
+                  target: elementInfo || {
+                    selector: 'input[type="file"]',
+                    tagName: 'INPUT',
+                    attributes: { type: 'file' },
+                    boundingBox: { x: 0, y: 0, width: 0, height: 0 }
+                  },
+                  value: fileMetadata.map((f: any) => f.name).join(', '),
+                  metadata: {
+                    files: fileMetadata,
+                    mode: this.pendingFileChooser.mode,
+                    multiple: fileMetadata.length > 1
+                  },
+                  tabId: this.currentTabId || undefined,
+                  tabUrl: this.currentTabUrl || undefined,
+                  tabTitle: this.currentTabTitle || undefined,
+                  webContentsId: this.currentWebContentsId || undefined
+                };
+                
+                await this.recordAction(action);
+                console.log('📁 File upload recorded:', fileMetadata.map((f: any) => f.name).join(', '));
+                this.pendingFileChooser = null;
+                return;
+              }
+            }
+          }
+        } catch (error) {
+          // Ignore errors during polling
+        }
+        
+        // Continue polling
+        setTimeout(() => pollForFiles(attempt + 1), 500);
+      };
+      
+      // Start polling after a short delay
+      setTimeout(() => pollForFiles(), 500);
+      
+    } catch (error) {
+      console.error('Error handling file chooser:', error);
+      this.pendingFileChooser = null;
+    }
+  }
 
   /**
    * Record navigation
