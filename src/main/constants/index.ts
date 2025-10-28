@@ -20,17 +20,5 @@ export const INTERNAL_PAGES: InternalPage[] = [
     {
         title: 'Automation',
         path: 'automation',
-    },
-    {
-        title: 'Profile',
-        path: 'profile',
-    },
-    {
-        title: 'Sign In',
-        path: 'signin',
-    },
-    {
-        title: 'Sign Up',
-        path: 'signup',
-    },
+    }
 ];

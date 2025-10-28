@@ -4,7 +4,6 @@ import { BrowserManager } from '@/main/BrowserManager';
 import { LayoutManager } from '@/main/window/LayoutManager';
 import { WindowManager } from '@/main/window/WindowManager';
 import { SettingsStore } from '@/main/settings/SettingsStore';
-import { UserService } from '@/main/user/UserService';
 import { PasswordManager } from '@/main/password/PasswordManager';
 import { RecordedAction, HistoryQuery, AppSettings } from '@/shared/types';
 
@@ -14,7 +13,6 @@ import { RecordedAction, HistoryQuery, AppSettings } from '@/shared/types';
  */
 export class IPCHandlers {
   private settingsStore: SettingsStore;
-  private userService: UserService;
   private passwordManager: PasswordManager;
 
   constructor(
@@ -23,7 +21,6 @@ export class IPCHandlers {
     private windowManager: WindowManager
   ) {
     this.settingsStore = new SettingsStore();
-    this.userService = new UserService();
     // Use the existing PasswordManager from BrowserManager instead of creating a new one
     this.passwordManager = this.browserManager.getPasswordManager();
     this.setupHandlers();
@@ -37,7 +34,6 @@ export class IPCHandlers {
     this.setupSidebarHandlers();
     this.setupRecordingHandlers();
     this.setupSettingsHandlers();
-    this.setupUserHandlers();
     this.setupHistoryHandlers();
     this.setupPasswordHandlers();
     this.setupWindowHandlers();
@@ -197,44 +193,6 @@ export class IPCHandlers {
 
     ipcMain.handle('settings:import', async (_, jsonString: string) => {
       return this.settingsStore.importSettings(jsonString);
-    });
-  }
-
-  private setupUserHandlers(): void {
-    ipcMain.handle('user:get-current', async () => {
-      return this.userService.getCurrentUser();
-    });
-
-    ipcMain.handle('user:is-authenticated', async () => {
-      return this.userService.isAuthenticated();
-    });
-
-    ipcMain.handle('user:sign-in', async (_, email: string, password?: string) => {
-      return this.userService.signIn(email, password);
-    });
-
-    ipcMain.handle('user:sign-out', async () => {
-      return this.userService.signOut();
-    });
-
-    ipcMain.handle('user:create', async (_, data: { email: string; name: string; password?: string }) => {
-      return this.userService.createUser(data);
-    });
-
-    ipcMain.handle('user:update-profile', async (_, updates: Parameters<typeof this.userService.updateProfile>[0]) => {
-      return this.userService.updateProfile(updates);
-    });
-
-    ipcMain.handle('user:update-preferences', async (_, preferences: Parameters<typeof this.userService.updatePreferences>[0]) => {
-      return this.userService.updatePreferences(preferences);
-    });
-
-    ipcMain.handle('user:delete-account', async () => {
-      return this.userService.deleteAccount();
-    });
-
-    ipcMain.handle('user:create-guest', async () => {
-      return this.userService.createGuestUser();
     });
   }
 
@@ -415,15 +373,6 @@ export class IPCHandlers {
     ipcMain.removeAllListeners('settings:reset-category');
     ipcMain.removeAllListeners('settings:export');
     ipcMain.removeAllListeners('settings:import');
-    ipcMain.removeAllListeners('user:get-current');
-    ipcMain.removeAllListeners('user:is-authenticated');
-    ipcMain.removeAllListeners('user:sign-in');
-    ipcMain.removeAllListeners('user:sign-out');
-    ipcMain.removeAllListeners('user:create');
-    ipcMain.removeAllListeners('user:update-profile');
-    ipcMain.removeAllListeners('user:update-preferences');
-    ipcMain.removeAllListeners('user:delete-account');
-    ipcMain.removeAllListeners('user:create-guest');
     ipcMain.removeAllListeners('history:get-all');
     ipcMain.removeAllListeners('history:search');
     ipcMain.removeAllListeners('history:get-today');

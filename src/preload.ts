@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { contextBridge, ipcRenderer, desktopCapturer } from 'electron';
-import { User, UserPreferences, HistoryEntry, HistoryQuery, HistoryStats, TabInfo, AppSettings } from '@/shared/types';
+import { HistoryEntry, HistoryQuery, HistoryStats, TabInfo, AppSettings } from '@/shared/types';
 
 
 export interface BrowserAPI {
@@ -62,16 +62,6 @@ export interface BrowserAPI {
   exportSettings: () => Promise<string>;
   importSettings: (jsonString: string) => Promise<boolean>;
 
-  // User Management
-  getCurrentUser: () => Promise<User | null>;
-  isAuthenticated: () => Promise<boolean>;
-  signIn: (email: string, password?: string) => Promise<User>;
-  signOut: () => Promise<void>;
-  createUser: (data: { email: string; name: string; password?: string }) => Promise<User>;
-  updateProfile: (updates: any) => Promise<User>;
-  updateUserPreferences: (preferences: UserPreferences) => Promise<User>;
-  deleteAccount: () => Promise<void>;
-  createGuestUser: () => Promise<User>;
 
   // History Management
   getAllHistory: (limit?: number) => Promise<HistoryEntry[]>;
@@ -206,18 +196,6 @@ const browserAPI: BrowserAPI = {
     ipcRenderer.invoke('settings:reset-category', category),
   exportSettings: () => ipcRenderer.invoke('settings:export'),
   importSettings: (jsonString: string) => ipcRenderer.invoke('settings:import', jsonString),
-
-  // User API
-  getCurrentUser: () => ipcRenderer.invoke('user:get-current'),
-  isAuthenticated: () => ipcRenderer.invoke('user:is-authenticated'),
-  signIn: (email: string, password?: string) => ipcRenderer.invoke('user:sign-in', email, password),
-  signOut: () => ipcRenderer.invoke('user:sign-out'),
-  createUser: (data: { email: string; name: string; password?: string }) => 
-    ipcRenderer.invoke('user:create', data),
-  updateProfile: (updates: any) => ipcRenderer.invoke('user:update-profile', updates),
-  updateUserPreferences: (preferences: any) => ipcRenderer.invoke('user:update-preferences', preferences),
-  deleteAccount: () => ipcRenderer.invoke('user:delete-account'),
-  createGuestUser: () => ipcRenderer.invoke('user:create-guest'),
 
   // History API
   getAllHistory: (limit?: number) => ipcRenderer.invoke('history:get-all', limit),

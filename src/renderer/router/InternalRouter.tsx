@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { History, Recordings, Automation, Profile, SignIn, SignUp, Settings } from '@/renderer/screens';
+import { History, Recordings, Automation, Settings } from '@/renderer/screens';
 
 /**
  * Internal page routes configuration
@@ -25,22 +25,7 @@ export const INTERNAL_ROUTES = {
     path: '/automation',
     component: Automation,
     title: 'Automation',
-  },
-  profile: {
-    path: '/profile',
-    component: Profile,
-    title: 'Profile',
-  },
-  signin: {
-    path: '/signin',
-    component: SignIn,
-    title: 'Sign In',
-  },
-  signup: {
-    path: '/signup',
-    component: SignUp,
-    title: 'Sign Up',
-  },
+  }
 } as const;
 
 export type InternalRouteName = keyof typeof INTERNAL_ROUTES;
