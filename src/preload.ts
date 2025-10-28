@@ -1,9 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { contextBridge, ipcRenderer, desktopCapturer } from 'electron';
-import { User, UserPreferences, HistoryEntry, HistoryQuery, HistoryStats, TabInfo, AppSettings } from '@/shared/types';
+import { HistoryEntry, HistoryQuery, HistoryStats, TabInfo, AppSettings, SignUpCredentials, SignInCredentials, AuthResponse, AuthSession, User } from '@/shared/types';
 
 
 export interface BrowserAPI {
+  // Initialization
+  initializeBrowser: () => Promise<boolean>;
+  
   // Tab Management
   createTab: (url?: string) => Promise<TabInfo>;
   closeTab: (tabId: string) => Promise<boolean>;
@@ -62,16 +65,6 @@ export interface BrowserAPI {
   exportSettings: () => Promise<string>;
   importSettings: (jsonString: string) => Promise<boolean>;
 
-  // User Management
-  getCurrentUser: () => Promise<User | null>;
-  isAuthenticated: () => Promise<boolean>;
-  signIn: (email: string, password?: string) => Promise<User>;
-  signOut: () => Promise<void>;
-  createUser: (data: { email: string; name: string; password?: string }) => Promise<User>;
-  updateProfile: (updates: any) => Promise<User>;
-  updateUserPreferences: (preferences: UserPreferences) => Promise<User>;
-  deleteAccount: () => Promise<void>;
-  createGuestUser: () => Promise<User>;
 
   // History Management
   getAllHistory: (limit?: number) => Promise<HistoryEntry[]>;
@@ -116,9 +109,29 @@ export interface BrowserAPI {
   onAutomationError: (callback: (data: { sessionId: string; error: string }) => void) => () => void;
 }
 
+export interface AuthAPI {
+  // Authentication
+  signUp: (credentials: SignUpCredentials) => Promise<AuthResponse>;
+  signIn: (credentials: SignInCredentials) => Promise<AuthResponse>;
+  signInWithGoogle: () => Promise<AuthResponse>;
+  signOut: () => Promise<{ success: boolean; error?: string }>;
+  
+  // Session Management
+  getCurrentSession: () => Promise<AuthSession | null>;
+  getCurrentUser: () => Promise<User | null>;
+  refreshSession: () => Promise<AuthResponse>;
+  
+  // Profile Management
+  updateProfile: (updates: { displayName?: string; photoURL?: string }) => Promise<AuthResponse>;
+  
+  // Password Management
+  resetPassword: (email: string) => Promise<{ success: boolean; error?: string }>;
+}
+
 // Expose protected methods that allow the renderer process to use
 // ipcRenderer without exposing the entire object
 const browserAPI: BrowserAPI = {
+  initializeBrowser: () => ipcRenderer.invoke('browser:initialize'),
   createTab: (url?: string) => ipcRenderer.invoke('browser:create-tab', url),
   closeTab: (tabId: string) => ipcRenderer.invoke('browser:close-tab', tabId),
   switchTab: (tabId: string) => ipcRenderer.invoke('browser:switch-tab', tabId),
@@ -207,18 +220,6 @@ const browserAPI: BrowserAPI = {
   exportSettings: () => ipcRenderer.invoke('settings:export'),
   importSettings: (jsonString: string) => ipcRenderer.invoke('settings:import', jsonString),
 
-  // User API
-  getCurrentUser: () => ipcRenderer.invoke('user:get-current'),
-  isAuthenticated: () => ipcRenderer.invoke('user:is-authenticated'),
-  signIn: (email: string, password?: string) => ipcRenderer.invoke('user:sign-in', email, password),
-  signOut: () => ipcRenderer.invoke('user:sign-out'),
-  createUser: (data: { email: string; name: string; password?: string }) => 
-    ipcRenderer.invoke('user:create', data),
-  updateProfile: (updates: any) => ipcRenderer.invoke('user:update-profile', updates),
-  updateUserPreferences: (preferences: any) => ipcRenderer.invoke('user:update-preferences', preferences),
-  deleteAccount: () => ipcRenderer.invoke('user:delete-account'),
-  createGuestUser: () => ipcRenderer.invoke('user:create-guest'),
-
   // History API
   getAllHistory: (limit?: number) => ipcRenderer.invoke('history:get-all', limit),
   searchHistory: (query: HistoryQuery) => ipcRenderer.invoke('history:search', query),
@@ -300,7 +301,19 @@ const browserAPI: BrowserAPI = {
   },
 };
 
+// Auth API implementation
+const authAPI: AuthAPI = {
+  signUp: (credentials: SignUpCredentials) => ipcRenderer.invoke('auth:sign-up', credentials),
+  signIn: (credentials: SignInCredentials) => ipcRenderer.invoke('auth:sign-in', credentials),
+  signInWithGoogle: () => ipcRenderer.invoke('auth:sign-in-google'),
+  signOut: () => ipcRenderer.invoke('auth:sign-out'),
+  getCurrentSession: () => ipcRenderer.invoke('auth:get-session'),
+  getCurrentUser: () => ipcRenderer.invoke('auth:get-user'),
+  refreshSession: () => ipcRenderer.invoke('auth:refresh-session'),
+  updateProfile: (updates: { displayName?: string; photoURL?: string }) => 
+    ipcRenderer.invoke('auth:update-profile', updates),
+  resetPassword: (email: string) => ipcRenderer.invoke('auth:reset-password', email),
+};
+
 contextBridge.exposeInMainWorld('browserAPI', browserAPI);
-contextBridge.exposeInMainWorld('electronAPI', {
-  getDesktopSources: browserAPI.getDesktopSources
-});
+contextBridge.exposeInMainWorld('authAPI', authAPI);

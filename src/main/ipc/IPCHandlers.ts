@@ -4,9 +4,9 @@ import { BrowserManager } from '@/main/BrowserManager';
 import { LayoutManager } from '@/main/window/LayoutManager';
 import { WindowManager } from '@/main/window/WindowManager';
 import { SettingsStore } from '@/main/settings/SettingsStore';
-import { UserService } from '@/main/user/UserService';
 import { PasswordManager } from '@/main/password/PasswordManager';
-import { RecordedAction, HistoryQuery, AppSettings } from '@/shared/types';
+import { AuthService } from '@/main/auth';
+import { RecordedAction, HistoryQuery, AppSettings, SignUpCredentials, SignInCredentials } from '@/shared/types';
 
 /**
  * IPCHandlers - Centralized IPC communication setup
@@ -14,8 +14,8 @@ import { RecordedAction, HistoryQuery, AppSettings } from '@/shared/types';
  */
 export class IPCHandlers {
   private settingsStore: SettingsStore;
-  private userService: UserService;
   private passwordManager: PasswordManager;
+  private authService: AuthService;
 
   constructor(
     private browserManager: BrowserManager,
@@ -23,12 +23,10 @@ export class IPCHandlers {
     private windowManager: WindowManager
   ) {
     this.settingsStore = new SettingsStore();
-    this.userService = new UserService();
     // Use the existing PasswordManager from BrowserManager instead of creating a new one
     this.passwordManager = this.browserManager.getPasswordManager();
+    this.authService = new AuthService();
     this.setupHandlers();
-
-    console.log('IPCHandlers initialized');
   }
 
   private setupHandlers(): void {
@@ -37,14 +35,19 @@ export class IPCHandlers {
     this.setupSidebarHandlers();
     this.setupRecordingHandlers();
     this.setupSettingsHandlers();
-    this.setupUserHandlers();
     this.setupHistoryHandlers();
     this.setupPasswordHandlers();
     this.setupWindowHandlers();
     this.setupAutomationHandlers();
+    this.setupAuthHandlers();
   }
 
   private setupTabHandlers(): void {
+    ipcMain.handle('browser:initialize', async () => {
+      this.browserManager.initializeAfterAuth();
+      return true;
+    });
+
     ipcMain.handle('browser:create-tab', async (_, url?: string) => {
       return this.browserManager.createTab(url);
     });
@@ -200,44 +203,6 @@ export class IPCHandlers {
     });
   }
 
-  private setupUserHandlers(): void {
-    ipcMain.handle('user:get-current', async () => {
-      return this.userService.getCurrentUser();
-    });
-
-    ipcMain.handle('user:is-authenticated', async () => {
-      return this.userService.isAuthenticated();
-    });
-
-    ipcMain.handle('user:sign-in', async (_, email: string, password?: string) => {
-      return this.userService.signIn(email, password);
-    });
-
-    ipcMain.handle('user:sign-out', async () => {
-      return this.userService.signOut();
-    });
-
-    ipcMain.handle('user:create', async (_, data: { email: string; name: string; password?: string }) => {
-      return this.userService.createUser(data);
-    });
-
-    ipcMain.handle('user:update-profile', async (_, updates: Parameters<typeof this.userService.updateProfile>[0]) => {
-      return this.userService.updateProfile(updates);
-    });
-
-    ipcMain.handle('user:update-preferences', async (_, preferences: Parameters<typeof this.userService.updatePreferences>[0]) => {
-      return this.userService.updatePreferences(preferences);
-    });
-
-    ipcMain.handle('user:delete-account', async () => {
-      return this.userService.deleteAccount();
-    });
-
-    ipcMain.handle('user:create-guest', async () => {
-      return this.userService.createGuestUser();
-    });
-  }
-
   private setupHistoryHandlers(): void {
     const historyService = this.browserManager.getHistoryService();
 
@@ -386,6 +351,53 @@ export class IPCHandlers {
     });
   }
 
+  private setupAuthHandlers(): void {
+    // Sign up
+    ipcMain.handle('auth:sign-up', async (_, credentials: SignUpCredentials) => {
+      return this.authService.signUp(credentials);
+    });
+
+    // Sign in
+    ipcMain.handle('auth:sign-in', async (_, credentials: SignInCredentials) => {
+      return this.authService.signIn(credentials);
+    });
+
+    // Sign in with Google
+    ipcMain.handle('auth:sign-in-google', async () => {
+      return this.authService.signInWithGoogle();
+    });
+
+    // Sign out
+    ipcMain.handle('auth:sign-out', async () => {
+      return this.authService.signOut();
+    });
+
+    // Get current session
+    ipcMain.handle('auth:get-session', async () => {
+      return this.authService.getCurrentSession();
+    });
+
+    // Get current user
+    ipcMain.handle('auth:get-user', async () => {
+      return this.authService.getCurrentUser();
+    });
+
+    // Refresh session
+    ipcMain.handle('auth:refresh-session', async () => {
+      return this.authService.refreshSession();
+    });
+
+    // Update profile
+    ipcMain.handle('auth:update-profile', async (_, updates: { displayName?: string; photoURL?: string }) => {
+      return this.authService.updateProfile(updates);
+    });
+
+    // Reset password
+    ipcMain.handle('auth:reset-password', async (_, email: string) => {
+      return this.authService.resetPassword(email);
+    });
+  }
+
   public cleanup(): void {
     ipcMain.removeAllListeners('browser:create-tab');
     ipcMain.removeAllListeners('browser:close-tab');
@@ -453,5 +465,16 @@ export class IPCHandlers {
     ipcMain.removeAllListeners('automation:generate-plan');
     ipcMain.removeAllListeners('automation:get-status');
     ipcMain.removeAllListeners('automation:cancel');
+    
+    // Auth handlers cleanup
+    ipcMain.removeAllListeners('auth:sign-up');
+    ipcMain.removeAllListeners('auth:sign-in');
+    ipcMain.removeAllListeners('auth:sign-in-google');
+    ipcMain.removeAllListeners('auth:sign-out');
+    ipcMain.removeAllListeners('auth:get-session');
+    ipcMain.removeAllListeners('auth:get-user');
+    ipcMain.removeAllListeners('auth:refresh-session');
+    ipcMain.removeAllListeners('auth:update-profile');
+    ipcMain.removeAllListeners('auth:reset-password');
   }
 }

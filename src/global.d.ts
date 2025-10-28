@@ -4,9 +4,6 @@ declare global {
   interface Window {
     browserAPI: BrowserAPI;
     authAPI: AuthAPI;
-    electronAPI: {
-      getDesktopSources: () => Promise<Array<{ id: string; name: string; thumbnail: any }>>;
-    };
   }
 
   // Vite Electron Forge globals
