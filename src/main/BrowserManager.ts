@@ -80,9 +80,13 @@ export class BrowserManager {
       this.sessionManager,
       agentUIView
     );
+  }
 
-    // Create initial tab
-    this.tabManager.createTab('https://www.google.com');
+  public initializeAfterAuth(): void {
+    const { tabs } = this.getAllTabs();
+    if (tabs.length === 0) {
+      this.tabManager.createTab('https://www.google.com');
+    }
   }
 
   // ============================================================================

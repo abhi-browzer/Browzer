@@ -48,9 +48,9 @@ export class WindowManager {
     }, 100);
 
     // Open DevTools in development
-    // if (process.env.NODE_ENV === 'development') {
-    //  this.agentUIView.webContents.openDevTools({ mode: 'detach' });
-    // }
+    if (process.env.NODE_ENV === 'development') {
+     this.agentUIView.webContents.openDevTools({ mode: 'detach' });
+    }
     // DevTools will only open via keyboard shortcut (Cmd+Shift+I) or context menu
   }
 

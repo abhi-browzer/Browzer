@@ -1,8 +1,7 @@
-import { ReactNode, useEffect } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { useAuth } from '@/renderer/hooks/useAuth';
 import { AuthScreen } from './AuthScreen';
-import { Loader2Icon } from 'lucide-react';
-import { toast } from 'sonner';
+import { Loader2 } from 'lucide-react';
 
 interface AuthGuardProps {
   children: ReactNode;
@@ -13,26 +12,51 @@ interface AuthGuardProps {
  * Shows AuthScreen if user is not authenticated
  */
 export function AuthGuard({ children }: AuthGuardProps) {
-  const { isAuthenticated, loading, initializeAuth,  } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
+  const [browserInitialized, setBrowserInitialized] = useState(false);
 
-  initializeAuth().then(() => {
-    toast.success('Auth initialized');
-  }).catch((error) => {
-    console.error("auth state: ", error);
-    toast.error('Failed to initialize auth');
-  });
+  // Initialize browser after authentication
+  useEffect(() => {
+    if (isAuthenticated && !browserInitialized) {
+      window.browserAPI.initializeBrowser()
+        .then(() => {
+          setBrowserInitialized(true);
+        })
+        .catch((error) => {
+          console.error('Failed to initialize browser:', error);
+        });
+    }
+  }, [isAuthenticated, browserInitialized]);
 
+  // Show loading spinner while checking auth
   if (loading) {
-    toast.loading('Loading...');
     return (
-      <Loader2Icon className="h-4 w-4 animate-spin text-primary" />
+      <div className="min-h-screen w-full flex items-center justify-center bg-slate-50 dark:bg-slate-900">
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-slate-600 dark:text-slate-400">Loading...</p>
+        </div>
+      </div>
     );
   }
 
+  // Show auth screen if not authenticated
   if (!isAuthenticated) {
-    toast.loading('Authenticating...')
     return <AuthScreen />;
   }
 
+  // Show loading while browser initializes
+  if (!browserInitialized) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-slate-50 dark:bg-slate-900">
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-slate-600 dark:text-slate-400">Initializing browser...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // User is authenticated and browser is initialized
   return <>{children}</>;
 }
