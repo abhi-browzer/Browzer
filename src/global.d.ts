@@ -1,8 +1,12 @@
-import type { BrowserAPI } from './preload';
+import type { BrowserAPI, AuthAPI } from './preload';
 
 declare global {
   interface Window {
     browserAPI: BrowserAPI;
+    authAPI: AuthAPI;
+    electronAPI: {
+      getDesktopSources: () => Promise<Array<{ id: string; name: string; thumbnail: any }>>;
+    };
   }
 
   // Vite Electron Forge globals
