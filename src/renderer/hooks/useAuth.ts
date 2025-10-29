@@ -45,7 +45,7 @@ export function useAuth() {
       
       if (session) {
         console.log('[Auth] Session found:', session);
-        toast.success(`Session found: ${session.user.email}`);
+        toast.success(`Welcome back to Browzer!`);
         store.setAuthData(session.user, session);
       } else {
         console.log('[Auth] No session found');
@@ -122,7 +122,6 @@ export function useAuth() {
 
       if (response.success && response.user && response.session) {
         store.setAuthData(response.user, response.session);
-        toast.success('Signed in successfully');
       } else if (response.error) {
         store.setError(response.error.message);
         toast.error(response.error.message);

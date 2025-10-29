@@ -1,5 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/renderer/ui/card';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { AuthLayout } from './AuthLayout';
 import { useState } from 'react';
 import { useAuth } from '@/renderer/hooks/useAuth';
@@ -15,6 +15,7 @@ import { FaGoogle } from 'react-icons/fa';
  * Route: /auth/signup
  */
 export function SignUpPage() {
+  const navigate = useNavigate();
   const { signUp, signInWithGoogle, loading } = useAuth();
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState(''); 
@@ -53,8 +54,9 @@ export function SignUpPage() {
     });
 
     if (result.success) {
-      // Show success message
       alert('Account created successfully! Please check your email to verify your account.');
+
+      navigate('/auth/verify-email');
     }
   };
 

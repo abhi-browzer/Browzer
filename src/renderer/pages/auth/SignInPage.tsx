@@ -1,5 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/renderer/ui/card';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { AuthLayout } from './AuthLayout';
 import { Label } from '@/renderer/ui/label';
 import { Loader2, Mail } from 'lucide-react';
@@ -17,6 +17,7 @@ import { FaGoogle } from 'react-icons/fa';
  * Route: /auth/signin
  */
 export function SignInPage() {
+  const navigate = useNavigate();
 
   const { signIn, signInWithGoogle, loading } = useAuth();
   const [email, setEmail] = useState('');
@@ -29,11 +30,15 @@ export function SignInPage() {
       toast.error('Please enter an email and password');
       return;
     }
-
+    
     await signIn({ email, password }).then(() => {
-      toast.success('Signed in successfully');
+      toast.success('Signed in successfully, redirecting...');
+      setTimeout(() => {
+        navigate('/');
+      }, 700)
     }).catch((error) => {
       toast.error(error.message);
+      console.log(error);
     });
   };
 

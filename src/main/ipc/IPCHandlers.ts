@@ -23,9 +23,8 @@ export class IPCHandlers {
     private windowManager: WindowManager
   ) {
     this.settingsStore = new SettingsStore();
-    // Use the existing PasswordManager from BrowserManager instead of creating a new one
     this.passwordManager = this.browserManager.getPasswordManager();
-    this.authService = new AuthService();
+    this.authService = new AuthService(this.browserManager);
     this.setupHandlers();
   }
 
@@ -399,73 +398,6 @@ export class IPCHandlers {
   }
 
   public cleanup(): void {
-    ipcMain.removeAllListeners('browser:create-tab');
-    ipcMain.removeAllListeners('browser:close-tab');
-    ipcMain.removeAllListeners('browser:switch-tab');
-    ipcMain.removeAllListeners('browser:get-tabs');
-    ipcMain.removeAllListeners('browser:navigate');
-    ipcMain.removeAllListeners('browser:go-back');
-    ipcMain.removeAllListeners('browser:go-forward');
-    ipcMain.removeAllListeners('browser:reload');
-    ipcMain.removeAllListeners('browser:stop');
-    ipcMain.removeAllListeners('browser:can-go-back');
-    ipcMain.removeAllListeners('browser:can-go-forward');
-    ipcMain.removeAllListeners('browser:set-sidebar-state');
-    ipcMain.removeAllListeners('browser:start-recording');
-    ipcMain.removeAllListeners('browser:stop-recording');
-    ipcMain.removeAllListeners('browser:save-recording');
-    ipcMain.removeAllListeners('browser:get-all-recordings');
-    ipcMain.removeAllListeners('browser:delete-recording');
-    ipcMain.removeAllListeners('browser:is-recording');
-    ipcMain.removeAllListeners('browser:get-recorded-actions');
-    ipcMain.removeAllListeners('browser:export-recording');
-    ipcMain.removeAllListeners('settings:get-all');
-    ipcMain.removeAllListeners('settings:get-category');
-    ipcMain.removeAllListeners('settings:update');
-    ipcMain.removeAllListeners('settings:update-category');
-    ipcMain.removeAllListeners('settings:reset-all');
-    ipcMain.removeAllListeners('settings:reset-category');
-    ipcMain.removeAllListeners('settings:export');
-    ipcMain.removeAllListeners('settings:import');
-    ipcMain.removeAllListeners('history:get-all');
-    ipcMain.removeAllListeners('history:search');
-    ipcMain.removeAllListeners('history:get-today');
-    ipcMain.removeAllListeners('history:get-last-n-days');
-    ipcMain.removeAllListeners('history:delete-entry');
-    ipcMain.removeAllListeners('history:delete-entries');
-    ipcMain.removeAllListeners('history:delete-by-date-range');
-    ipcMain.removeAllListeners('history:clear-all');
-    ipcMain.removeAllListeners('history:get-stats');
-    ipcMain.removeAllListeners('history:get-most-visited');
-    ipcMain.removeAllListeners('history:get-recently-visited');
-    
-    // Password manager cleanup
-    ipcMain.removeAllListeners('password:save');
-    ipcMain.removeAllListeners('password:get-for-origin');
-    ipcMain.removeAllListeners('password:get-password');
-    ipcMain.removeAllListeners('password:delete');
-    ipcMain.removeAllListeners('password:add-to-blacklist');
-    ipcMain.removeAllListeners('password:is-blacklisted');
-    
-    // Window handlers cleanup
-    ipcMain.removeAllListeners('window:toggle-maximize');
-    
-    // Automation handlers cleanup
-    ipcMain.removeAllListeners('automation:initialize');
-    ipcMain.removeAllListeners('automation:execute');
-    ipcMain.removeAllListeners('automation:generate-plan');
-    ipcMain.removeAllListeners('automation:get-status');
-    ipcMain.removeAllListeners('automation:cancel');
-    
-    // Auth handlers cleanup
-    ipcMain.removeAllListeners('auth:sign-up');
-    ipcMain.removeAllListeners('auth:sign-in');
-    ipcMain.removeAllListeners('auth:sign-in-google');
-    ipcMain.removeAllListeners('auth:sign-out');
-    ipcMain.removeAllListeners('auth:get-session');
-    ipcMain.removeAllListeners('auth:get-user');
-    ipcMain.removeAllListeners('auth:refresh-session');
-    ipcMain.removeAllListeners('auth:update-profile');
-    ipcMain.removeAllListeners('auth:reset-password');
+    ipcMain.removeAllListeners();
   }
 }

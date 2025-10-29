@@ -1,7 +1,9 @@
-import { createClient, SupabaseClient, Session, User as SupabaseUser } from '@supabase/supabase-js';
-import { app, BrowserWindow, shell } from 'electron';
+import { SupabaseClient, Session, User as SupabaseUser } from '@supabase/supabase-js';
+import { BrowserWindow } from 'electron';
 import Store from 'electron-store';
 import { User, AuthSession, AuthResponse, SignUpCredentials, SignInCredentials } from '@/shared/types';
+import { getSupabaseClient } from './supabase';
+import { BrowserManager } from '../BrowserManager';
 
 /**
  * AuthService - Manages authentication with Supabase
@@ -19,22 +21,13 @@ export class AuthService {
   private refreshTimer: NodeJS.Timeout | null = null;
   private authWindow: BrowserWindow | null = null;
 
-  constructor() {
-    const supabaseUrl = process.env.VITE_SUPABASE_URL;
-    const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
+  private readonly browserManager: BrowserManager;
 
-    if (!supabaseUrl || !supabaseAnonKey) {
-      throw new Error('Supabase credentials not configured. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env file');
-    }
-
-    // Initialize Supabase client
-    this.supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        autoRefreshToken: true,
-        persistSession: false, // We handle persistence manually
-        detectSessionInUrl: false,
-      },
-    });
+  constructor(
+    browserManager: BrowserManager
+  ) {
+    this.browserManager = browserManager;
+    this.supabase = getSupabaseClient();
 
     // Initialize secure session storage
     this.sessionStore = new Store({
@@ -54,7 +47,6 @@ export class AuthService {
    */
   private setupAuthStateListener(): void {
     this.supabase.auth.onAuthStateChange((event, session) => {
-      console.log('Auth state changed:', event);
       
       if (event === 'SIGNED_IN' && session) {
         this.persistSession(session);
@@ -315,6 +307,7 @@ export class AuthService {
 
       this.clearSession();
       this.cancelTokenRefresh();
+      this.browserManager.destroy()
 
       return { success: true };
     } catch (error: any) {
