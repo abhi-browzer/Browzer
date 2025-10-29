@@ -107,6 +107,14 @@ export interface BrowserAPI {
   onAutomationProgress: (callback: (data: { sessionId: string; event: any }) => void) => () => void;
   onAutomationComplete: (callback: (data: { sessionId: string; result: any }) => void) => () => void;
   onAutomationError: (callback: (data: { sessionId: string; error: string }) => void) => () => void;
+  
+  // Deep Link event listeners
+  onDeepLink: (callback: (data: { protocol: string; route: string; params: Record<string, string>; fullUrl: string; routeType: string | null }) => void) => () => void;
+  
+  // Deep Link actions
+  hideAllTabs: () => Promise<boolean>;
+  showAllTabs: () => Promise<boolean>;
+  navigateToTab: (url: string) => Promise<boolean>;
 }
 
 export interface AuthAPI {
@@ -305,6 +313,18 @@ const browserAPI: BrowserAPI = {
     ipcRenderer.on('automation:error', subscription);
     return () => ipcRenderer.removeListener('automation:error', subscription);
   },
+  
+  // Deep Link event listener
+  onDeepLink: (callback) => {
+    const subscription = (_: any, data: any) => callback(data);
+    ipcRenderer.on('deeplink:navigate', subscription);
+    return () => ipcRenderer.removeListener('deeplink:navigate', subscription);
+  },
+  
+  // Deep Link actions
+  hideAllTabs: () => ipcRenderer.invoke('deeplink:hide-tabs'),
+  showAllTabs: () => ipcRenderer.invoke('deeplink:show-tabs'),
+  navigateToTab: (url: string) => ipcRenderer.invoke('deeplink:navigate-tab', url),
 };
 
 // Auth API implementation

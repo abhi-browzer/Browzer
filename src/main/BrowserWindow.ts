@@ -69,6 +69,10 @@ export class BrowserWindow {
     return this.windowManager.getWindow();
   }
 
+  public getAgentUIView() {
+    return this.windowManager.getAgentUIView();
+  }
+
   public destroy(): void {
     this.ipcHandlers.cleanup();
     this.browserManager.destroy();

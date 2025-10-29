@@ -39,6 +39,7 @@ export class IPCHandlers {
     this.setupWindowHandlers();
     this.setupAutomationHandlers();
     this.setupAuthHandlers();
+    this.setupDeepLinkHandlers();
   }
 
   private setupTabHandlers(): void {
@@ -414,6 +415,26 @@ export class IPCHandlers {
     // Resend password reset OTP
     ipcMain.handle('auth:resend-password-reset-otp', async (_, email: string) => {
       return this.authService.resendPasswordResetOTP(email);
+    });
+  }
+
+  private setupDeepLinkHandlers(): void {
+    // Hide all tabs (for fullscreen routes)
+    ipcMain.handle('deeplink:hide-tabs', async () => {
+      this.browserManager.hideAllTabs();
+      return true;
+    });
+
+    // Show all tabs (restore normal browsing)
+    ipcMain.handle('deeplink:show-tabs', async () => {
+      this.browserManager.showAllTabs();
+      return true;
+    });
+
+    // Navigate to browzer:// URL in tab
+    ipcMain.handle('deeplink:navigate-tab', async (_, url: string) => {
+      this.browserManager.navigateToBrowzerURL(url);
+      return true;
     });
   }
 

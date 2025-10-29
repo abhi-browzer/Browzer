@@ -266,6 +266,34 @@ export class BrowserManager {
     this.tabManager.updateLayout(sidebarWidth);
   }
 
+  /**
+   * Hide all tabs (for fullscreen routes like auth pages)
+   */
+  public hideAllTabs(): void {
+    this.tabManager.hideAllTabs();
+  }
+
+  /**
+   * Show all tabs (restore normal browsing mode)
+   */
+  public showAllTabs(): void {
+    this.tabManager.showAllTabs();
+  }
+
+  /**
+   * Navigate active tab or create new tab with browzer:// URL
+   */
+  public navigateToBrowzerURL(url: string): void {
+    const activeTab = this.tabManager.getActiveTab();
+    if (activeTab) {
+      // Navigate existing tab
+      this.navigate(activeTab.id, url);
+    } else {
+      // Create new tab with this URL
+      this.createTab(url);
+    }
+  }
+
   // ============================================================================
   // Cleanup
   // ============================================================================

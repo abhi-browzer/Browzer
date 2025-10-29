@@ -476,4 +476,28 @@ export class TabManager {
       console.error('[TabManager] Error auto-filling password:', error);
     }
   }
+
+  /**
+   * Hide all tabs (for fullscreen routes)
+   */
+  public hideAllTabs(): void {
+    console.log('[TabManager] Hiding all tabs');
+    this.tabs.forEach(tab => {
+      // Set bounds to zero to hide the view
+      tab.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+    });
+  }
+
+  /**
+   * Show all tabs (restore normal browsing)
+   */
+  public showAllTabs(): void {
+    console.log('[TabManager] Showing all tabs');
+    // Update layout for all tabs
+    this.tabs.forEach(tab => {
+      if (tab.id === this.activeTabId) {
+        this.updateTabViewBounds(tab.view, this.currentSidebarWidth);
+      }
+    });
+  }
 }
