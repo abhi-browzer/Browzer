@@ -1,21 +1,22 @@
 import { app, BaseWindow, WebContents } from 'electron';
-import { getDeepLinkRoute, DeepLinkRouteType } from './DeepLinkRouter';
+import { getRouteFromURL } from '@/shared/routes';
 
 /**
- * Deep link URL structure: browzer://[route]/[...params]
+ * DeepLinkService - Simple deep link handler
+ * 
+ * Responsibilities:
+ * 1. Listen for OS deep link events (open-url, second-instance)
+ * 2. Parse browzer:// URLs
+ * 3. Send to renderer for navigation
+ * 
  * Examples:
- * - browzer://settings (IN_TAB)
- * - browzer://history (IN_TAB)
- * - browzer://auth/confirm-signup (FULLSCREEN)
- * - browzer://auth/reset-password (FULLSCREEN)
+ * - browzer://settings
+ * - browzer://auth/confirm-signup
  */
 
 export interface DeepLinkData {
-  protocol: string;
-  route: string;
-  params: Record<string, string>;
-  fullUrl: string;
-  routeType: DeepLinkRouteType | null;
+  url: string;
+  showInTab: boolean;
 }
 
 export class DeepLinkService {
@@ -88,52 +89,26 @@ export class DeepLinkService {
   }
 
   /**
-   * Parse deep link URL into structured data
+   * Parse deep link URL
    */
-  public parseDeepLink(url: string): DeepLinkData | null {
+  private parseDeepLink(url: string): DeepLinkData | null {
     try {
-      console.log('[DeepLinkService] Parsing deep link:', url);
-      
-      // Remove trailing slashes
-      url = url.replace(/\/+$/, '');
-      
-      const urlObj = new URL(url);
-      
-      if (urlObj.protocol !== 'browzer:') {
-        console.warn('[DeepLinkService] Invalid protocol:', urlObj.protocol);
+      if (!url.startsWith('browzer://')) {
         return null;
       }
 
-      // Extract route (hostname + pathname)
-      // browzer://settings -> route: 'settings'
-      // browzer://automation/session/123 -> route: 'automation/session/123'
-      const route = (urlObj.hostname + urlObj.pathname).replace(/^\/+|\/+$/g, '');
-      
-      // Extract query parameters
-      const params: Record<string, string> = {};
-      urlObj.searchParams.forEach((value, key) => {
-        params[key] = value;
-      });
+      const route = getRouteFromURL(url);
+      if (!route) {
+        console.warn('[DeepLinkService] Unknown route:', url);
+        return null;
+      }
 
-      // Determine route type
-      const routeConfig = getDeepLinkRoute(route);
-      const routeType = routeConfig?.type || null;
-
-      const deepLinkData: DeepLinkData = {
-        protocol: 'browzer',
-        route,
-        params,
-        fullUrl: url,
-        routeType,
+      return {
+        url,
+        showInTab: route.showInTab,
       };
-
-      console.log('[DeepLinkService] Parsed deep link:', {
-        ...deepLinkData,
-        routeConfig: routeConfig ? `${routeConfig.title} (${routeConfig.type})` : 'unknown'
-      });
-      return deepLinkData;
     } catch (error) {
-      console.error('[DeepLinkService] Failed to parse deep link:', error);
+      console.error('[DeepLinkService] Parse error:', error);
       return null;
     }
   }
@@ -142,43 +117,18 @@ export class DeepLinkService {
    * Handle incoming deep link
    */
   private handleDeepLink(url: string): void {
-    console.log('[DeepLinkService] Handling deep link:', url);
-    
-    const deepLinkData = this.parseDeepLink(url);
-    
-    if (!deepLinkData) {
-      console.error('[DeepLinkService] Invalid deep link URL:', url);
-      return;
-    }
+    const data = this.parseDeepLink(url);
+    if (!data) return;
 
-    // If window is not ready yet, store the deep link for later
-    if (!this.baseWindow || !this.webContents) {
-      console.log('[DeepLinkService] Window not ready, storing deep link for later');
+    if (!this.webContents) {
       this.pendingDeepLink = url;
       return;
     }
 
-    // Focus the window
     this.focusMainWindow();
-
-    // Send deep link to renderer process
-    this.sendDeepLinkToRenderer(deepLinkData);
+    this.webContents.send('deeplink:navigate', data);
   }
 
-  /**
-   * Send deep link data to renderer process
-   */
-  private sendDeepLinkToRenderer(deepLinkData: DeepLinkData): void {
-    if (!this.webContents) {
-      console.error('[DeepLinkService] No webContents available to send deep link');
-      return;
-    }
-
-    console.log('[DeepLinkService] Sending deep link to renderer:', deepLinkData);
-    
-    // Send to renderer via webContents
-    this.webContents.send('deeplink:navigate', deepLinkData);
-  }
 
   /**
    * Focus the main window
@@ -193,23 +143,4 @@ export class DeepLinkService {
     }
   }
 
-  /**
-   * Manually trigger a deep link (for testing)
-   */
-  public triggerDeepLink(url: string): void {
-    this.handleDeepLink(url);
-  }
-
-  /**
-   * Get supported routes
-   */
-  public getSupportedRoutes(): string[] {
-    return [
-      'settings',
-      'history',
-      'recordings',
-      'automation',
-      'profile',
-    ];
-  }
 }

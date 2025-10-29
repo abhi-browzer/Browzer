@@ -1,40 +1,20 @@
 import { useEffect, useState } from 'react';
 import { History, Recordings, Automation, Settings } from '@/renderer/screens';
 import Profile from '@/renderer/pages/Profile';
+import { INTERNAL_ROUTES as ROUTES } from '@/shared/routes';
 
 /**
- * Internal page routes configuration
- * Maps browzer:// URLs to their corresponding React components
+ * Internal page routes - Maps route names to React components
  */
-export const INTERNAL_ROUTES = {
-  profile: {
-    path: '/profile',
-    component: Profile,
-    title: 'Profile',
-  },
-  settings: {
-    path: '/settings',
-    component: Settings,
-    title: 'Settings',
-  },
-  history: {
-    path: '/history',
-    component: History,
-    title: 'History',
-  },
-  recordings: {
-    path: '/recordings',
-    component: Recordings,
-    title: 'Recordings',
-  },
-  automation: {
-    path: '/automation',
-    component: Automation,
-    title: 'Automation',
-  },
-} as const;
+const ROUTE_COMPONENTS: Record<string, React.ComponentType> = {
+  profile: Profile,
+  settings: Settings,
+  history: History,
+  recordings: Recordings,
+  automation: Automation,
+};
 
-export type InternalRouteName = keyof typeof INTERNAL_ROUTES;
+export type InternalRouteName = keyof typeof ROUTES;
 
 export function InternalRouter() {
   const [currentRoute, setCurrentRoute] = useState<InternalRouteName | null>(null);
@@ -47,12 +27,12 @@ export function InternalRouter() {
       // Extract route name from hash (e.g., #/settings -> settings)
       const routeName = hash.replace('#/', '') as InternalRouteName;
       
-      if (routeName && INTERNAL_ROUTES[routeName]) {
+      if (routeName && ROUTES[routeName]) {
         console.log('InternalRouter: Matched route:', routeName);
         setCurrentRoute(routeName);
         
         // Update document title
-        document.title = `${INTERNAL_ROUTES[routeName].title} - Browzer`;
+        document.title = `${ROUTES[routeName].title} - Browzer`;
       } else {
         console.log('InternalRouter: No matching route');
         setCurrentRoute(null);
@@ -73,7 +53,7 @@ export function InternalRouter() {
     )
   }
 
-  const RouteComponent = INTERNAL_ROUTES[currentRoute].component;
+  const RouteComponent = ROUTE_COMPONENTS[currentRoute];
 
   return (
     <RouteComponent />
@@ -87,7 +67,7 @@ export function useIsInternalPage(): boolean {
     const checkRoute = () => {
       const hash = window.location.hash;
       const routeName = hash.replace('#/', '') as InternalRouteName;
-      setIsInternal(!!routeName && !!INTERNAL_ROUTES[routeName]);
+      setIsInternal(!!routeName && !!ROUTES[routeName]);
     };
 
     checkRoute();
@@ -99,12 +79,12 @@ export function useIsInternalPage(): boolean {
   return isInternal;
 }
 
-export function getCurrentInternalRoute(): typeof INTERNAL_ROUTES[InternalRouteName] | null {
+export function getCurrentInternalRoute(): typeof ROUTES[InternalRouteName] | null {
   const hash = window.location.hash;
   const routeName = hash.replace('#/', '') as InternalRouteName;
   
-  if (routeName && INTERNAL_ROUTES[routeName]) {
-    return INTERNAL_ROUTES[routeName];
+  if (routeName && ROUTES[routeName]) {
+    return ROUTES[routeName];
   }
   
   return null;

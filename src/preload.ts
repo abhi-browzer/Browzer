@@ -109,7 +109,7 @@ export interface BrowserAPI {
   onAutomationError: (callback: (data: { sessionId: string; error: string }) => void) => () => void;
   
   // Deep Link event listeners
-  onDeepLink: (callback: (data: { protocol: string; route: string; params: Record<string, string>; fullUrl: string; routeType: string | null }) => void) => () => void;
+  onDeepLink: (callback: (data: { url: string; showInTab: boolean }) => void) => () => void;
   
   // Deep Link actions
   hideAllTabs: () => Promise<boolean>;
