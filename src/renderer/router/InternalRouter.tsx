@@ -1,11 +1,17 @@
 import { useEffect, useState } from 'react';
 import { History, Recordings, Automation, Settings } from '@/renderer/screens';
+import Profile from '@/renderer/pages/Profile';
 
 /**
- * Internal page routes configurationπ
+ * Internal page routes configuration
  * Maps browzer:// URLs to their corresponding React components
  */
 export const INTERNAL_ROUTES = {
+  profile: {
+    path: '/profile',
+    component: Profile,
+    title: 'Profile',
+  },
   settings: {
     path: '/settings',
     component: Settings,

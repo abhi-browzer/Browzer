@@ -257,7 +257,6 @@ export function useAuth() {
 
         if (response.success && response.user) {
           store.setUser(response.user);
-          toast.success('Profile updated');
         } else if (response.error) {
           store.setError(response.error.message);
           toast.error(response.error.message);
