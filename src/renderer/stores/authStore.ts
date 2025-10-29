@@ -2,33 +2,41 @@ import { create } from 'zustand';
 import { AuthState, User, AuthSession } from '@/shared/types';
 
 /**
- * Auth Store - Manages authentication state in renderer process
+ * Auth Store - Centralized authentication state management
  * 
- * Features:
- * - Centralized auth state management
- * - Reactive updates across components
+ * Architecture:
+ * - Single source of truth for auth state
+ * - Immutable state updates
  * - Persists user and session data
  */
+
 interface AuthStore extends AuthState {
-  // Actions
+  // Prevents duplicate initialization
+  initialized: boolean;
+  
+  // State setters - simple and predictable
   setUser: (user: User | null) => void;
   setSession: (session: AuthSession | null) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
-  setAuthenticated: (isAuthenticated: boolean) => void;
-  reset: () => void;
+  setInitialized: (initialized: boolean) => void;
+  
+  // Composite actions
+  setAuthData: (user: User, session: AuthSession) => void;
+  clearAuth: () => void;
 }
 
 const initialState: AuthState = {
   isAuthenticated: false,
   user: null,
   session: null,
-  loading: false,
+  loading: true, // Start loading until initialized
   error: null,
 };
 
 export const useAuthStore = create<AuthStore>((set) => ({
   ...initialState,
+  initialized: false,
 
   setUser: (user) => set({ user, isAuthenticated: !!user }),
   
@@ -38,7 +46,20 @@ export const useAuthStore = create<AuthStore>((set) => ({
   
   setError: (error) => set({ error }),
   
-  setAuthenticated: (isAuthenticated) => set({ isAuthenticated }),
+  setInitialized: (initialized) => set({ initialized }),
   
-  reset: () => set({ ...initialState, loading: false }),
+  setAuthData: (user, session) => 
+    set({ 
+      user, 
+      session, 
+      isAuthenticated: true,
+      error: null 
+    }),
+  
+  clearAuth: () => 
+    set({ 
+      ...initialState, 
+      loading: false, 
+      initialized: true 
+    }),
 }));

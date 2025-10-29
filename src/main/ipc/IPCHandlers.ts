@@ -427,15 +427,6 @@ export class IPCHandlers {
     ipcMain.removeAllListeners('settings:reset-category');
     ipcMain.removeAllListeners('settings:export');
     ipcMain.removeAllListeners('settings:import');
-    ipcMain.removeAllListeners('user:get-current');
-    ipcMain.removeAllListeners('user:is-authenticated');
-    ipcMain.removeAllListeners('user:sign-in');
-    ipcMain.removeAllListeners('user:sign-out');
-    ipcMain.removeAllListeners('user:create');
-    ipcMain.removeAllListeners('user:update-profile');
-    ipcMain.removeAllListeners('user:update-preferences');
-    ipcMain.removeAllListeners('user:delete-account');
-    ipcMain.removeAllListeners('user:create-guest');
     ipcMain.removeAllListeners('history:get-all');
     ipcMain.removeAllListeners('history:search');
     ipcMain.removeAllListeners('history:get-today');
