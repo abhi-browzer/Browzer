@@ -1,8 +1,9 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { ProtectedRoute } from '@/renderer/components/auth/ProtectedRoute';
 import { SignInPage, SignUpPage, ForgotPasswordPage, VerifyEmailPage } from '@/renderer/pages/auth';
 import { BrowserChrome } from '@/renderer/components/BrowserChrome';
 import { InternalRouter, useIsInternalPage } from './InternalRouter';
+import NotFound from '@/renderer/pages/not-found';
 
 function MainApp() {
   const isInternalPage = useIsInternalPage();
@@ -31,7 +32,7 @@ export function AppRouter() {
         />
         
         {/* Fallback - redirect to signin */}
-        <Route path="*" element={<Navigate to="/auth/signin" replace />} />
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>
   );

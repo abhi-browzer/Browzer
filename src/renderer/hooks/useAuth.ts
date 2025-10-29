@@ -335,19 +335,3 @@ export function useAuth() {
     initialize,
   };
 }
-
-/**
- * Usage Examples:
- * 
- * 1. Basic usage in component:
- *    const { isAuthenticated, user, signIn } = useAuth();
- * 
- * 2. Sign in:
- *    await signIn({ email: 'user@example.com', password: 'password' });
- * 
- * 3. Sign out:
- *    await signOut();
- * 
- * 4. Manual refresh:
- *    await refreshSession();
- */

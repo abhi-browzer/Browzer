@@ -42,14 +42,13 @@ export class WindowManager {
 
     // Show window after loading
     setTimeout(() => {
-      this.baseWindow?.show();
+      this.baseWindow.show();
     }, 100);
 
     // Open DevTools in development
-    if (process.env.NODE_ENV === 'development') {
-     this.browserUIView.webContents.openDevTools({ mode: 'detach' });
-    }
-    // DevTools will only open via keyboard shortcut (Cmd+Shift+I) or context menu
+    // if (process.env.NODE_ENV === 'development') {
+    //  this.browserUIView.webContents.openDevTools({ mode: 'detach' });
+    // }
   }
 
   private setupAgentUI(): void {
@@ -92,6 +91,6 @@ export class WindowManager {
   }
 
   public destroy(): void {
-    this.baseWindow?.close();
+    this.baseWindow.close();
   }
 }

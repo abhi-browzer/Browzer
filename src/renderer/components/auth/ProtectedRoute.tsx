@@ -57,8 +57,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   if (loading) {
     return (
       <div className="h-screen flex flex-col items-center justify-center">
-        <Loader2 className="size-8 animate-spin text-blue-600 mb-4" />
-        <p className="text-slate-600 dark:text-slate-400">Loading...</p>
+        <Loader2 className="size-4 animate-spin mb-4 text-primary" />
       </div>
     );
   }
@@ -72,8 +71,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   if (!browserReady) {
     return (
       <div className="h-screen flex flex-col items-center justify-center">
-        <Loader2 className="size-8 animate-spin text-blue-600 mb-4" />
-        <p className="text-slate-600 dark:text-slate-400">Initializing browser...</p>
+        <Loader2 className="size-4 animate-spin mb-4 text-blue-600" />
       </div>
     );
   }
