@@ -395,6 +395,16 @@ export class IPCHandlers {
     ipcMain.handle('auth:reset-password', async (_, email: string) => {
       return this.authService.resetPassword(email);
     });
+
+    // Verify email with OTP
+    ipcMain.handle('auth:verify-otp', async (_, email: string, token: string) => {
+      return this.authService.verifyEmailOTP(email, token);
+    });
+
+    // Resend verification OTP
+    ipcMain.handle('auth:resend-otp', async (_, email: string) => {
+      return this.authService.resendVerificationOTP(email);
+    });
   }
 
   public cleanup(): void {

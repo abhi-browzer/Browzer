@@ -63,43 +63,34 @@ export class AuthService {
 
   /**
    * Sign up with email and password
+   * Uses email OTP for verification instead of magic links
    */
   async signUp(credentials: SignUpCredentials): Promise<AuthResponse> {
     try {
-      const { data, error } = await this.supabase.auth.signUp({
+      const result = await this.supabase.auth.signUp({
         email: credentials.email,
         password: credentials.password,
         options: {
           data: {
             display_name: credentials.displayName,
           },
+          // Use email OTP instead of confirmation link
+          emailRedirectTo: undefined,
         },
       });
 
-      if (error) {
+      if (result.error) {
         return {
           success: false,
           error: {
-            code: error.status?.toString() || 'SIGNUP_ERROR',
-            message: error.message,
-          },
-        };
-      }
-
-      if (!data.user || !data.session) {
-        return {
-          success: false,
-          error: {
-            code: 'NO_USER_DATA',
-            message: 'Sign up succeeded but no user data returned',
+            code: result.error.status?.toString() || 'SIGNUP_ERROR',
+            message: result.error.message,
           },
         };
       }
 
       return {
         success: true,
-        user: this.mapSupabaseUser(data.user),
-        session: this.mapSupabaseSession(data.session),
       };
     } catch (error: any) {
       return {
@@ -425,13 +416,85 @@ export class AuthService {
   }
 
   /**
+   * Verify email with OTP code
+   */
+  async verifyEmailOTP(email: string, token: string): Promise<AuthResponse> {
+    try {
+      const { data, error } = await this.supabase.auth.verifyOtp({
+        email,
+        token,
+        type: 'signup',
+      });
+
+      if (error) {
+        return {
+          success: false,
+          error: {
+            code: error.status?.toString() || 'VERIFY_ERROR',
+            message: error.message,
+          },
+        };
+      }
+
+      if (!data.user || !data.session) {
+        return {
+          success: false,
+          error: {
+            code: 'NO_USER',
+            message: 'No user data returned after verification',
+          },
+        };
+      }
+
+      // Session will be automatically persisted by auth state listener
+      return {
+        success: true,
+        user: this.mapSupabaseUser(data.user),
+        session: this.mapSupabaseSession(data.session),
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: {
+          code: 'VERIFY_EXCEPTION',
+          message: error.message || 'An unexpected error occurred during verification',
+        },
+      };
+    }
+  }
+
+  /**
+   * Resend verification OTP
+   */
+  async resendVerificationOTP(email: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { error } = await this.supabase.auth.resend({
+        type: 'signup',
+        email,
+      });
+
+      if (error) {
+        return {
+          success: false,
+          error: error.message,
+        };
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message || 'An unexpected error occurred while resending OTP',
+      };
+    }
+  }
+
+  /**
    * Reset password
    */
   async resetPassword(email: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const { error } = await this.supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: 'browzer://auth/reset-password',
-      });
+      const { error } = await this.supabase.auth.resetPasswordForEmail(email);
 
       if (error) {
         return {

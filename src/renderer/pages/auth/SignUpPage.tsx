@@ -9,6 +9,7 @@ import { Label } from '@/renderer/ui/label';
 import { Loader2, Mail, Lock, User, Chrome } from 'lucide-react';
 import { Separator } from '@/renderer/ui/separator';
 import { FaGoogle } from 'react-icons/fa';
+import { toast } from 'sonner';
 
 /**
  * Sign Up Page
@@ -54,9 +55,9 @@ export function SignUpPage() {
     });
 
     if (result.success) {
-      alert('Account created successfully! Please check your email to verify your account.');
-
-      navigate('/auth/verify-email');
+      toast.success('Verification code sent! Check your email.');
+      // Redirect to OTP verification page with email
+      navigate(`/auth/verify-otp?email=${encodeURIComponent(email)}`);
     }
   };
 

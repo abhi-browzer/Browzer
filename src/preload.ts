@@ -126,6 +126,10 @@ export interface AuthAPI {
   
   // Password Management
   resetPassword: (email: string) => Promise<{ success: boolean; error?: string }>;
+  
+  // OTP Verification
+  verifyOTP: (email: string, token: string) => Promise<AuthResponse>;
+  resendOTP: (email: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 // Expose protected methods that allow the renderer process to use
@@ -313,6 +317,8 @@ const authAPI: AuthAPI = {
   updateProfile: (updates: { displayName?: string; photoURL?: string }) => 
     ipcRenderer.invoke('auth:update-profile', updates),
   resetPassword: (email: string) => ipcRenderer.invoke('auth:reset-password', email),
+  verifyOTP: (email: string, token: string) => ipcRenderer.invoke('auth:verify-otp', email, token),
+  resendOTP: (email: string) => ipcRenderer.invoke('auth:resend-otp', email),
 };
 
 contextBridge.exposeInMainWorld('browserAPI', browserAPI);

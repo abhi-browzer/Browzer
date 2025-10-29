@@ -16,6 +16,16 @@ protocol.registerSchemesAsPrivileged([
       bypassCSP: false,
       stream: true
     }
+  },
+  {
+    scheme: 'browzer',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      allowServiceWorkers: true,
+      corsEnabled: true,
+    }
   }
 ]);
 
