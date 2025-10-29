@@ -124,12 +124,14 @@ export interface AuthAPI {
   // Profile Management
   updateProfile: (updates: { displayName?: string; photoURL?: string }) => Promise<AuthResponse>;
   
-  // Password Management
-  resetPassword: (email: string) => Promise<{ success: boolean; error?: string }>;
-  
   // OTP Verification
   verifyOTP: (email: string, token: string) => Promise<AuthResponse>;
   resendOTP: (email: string) => Promise<{ success: boolean; error?: string }>;
+  
+  // Password Reset
+  sendPasswordResetOTP: (email: string) => Promise<{ success: boolean; error?: string }>;
+  verifyPasswordResetOTP: (email: string, token: string, newPassword: string) => Promise<AuthResponse>;
+  resendPasswordResetOTP: (email: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 // Expose protected methods that allow the renderer process to use
@@ -316,9 +318,12 @@ const authAPI: AuthAPI = {
   refreshSession: () => ipcRenderer.invoke('auth:refresh-session'),
   updateProfile: (updates: { displayName?: string; photoURL?: string }) => 
     ipcRenderer.invoke('auth:update-profile', updates),
-  resetPassword: (email: string) => ipcRenderer.invoke('auth:reset-password', email),
   verifyOTP: (email: string, token: string) => ipcRenderer.invoke('auth:verify-otp', email, token),
   resendOTP: (email: string) => ipcRenderer.invoke('auth:resend-otp', email),
+  sendPasswordResetOTP: (email: string) => ipcRenderer.invoke('auth:send-password-reset-otp', email),
+  verifyPasswordResetOTP: (email: string, token: string, newPassword: string) => 
+    ipcRenderer.invoke('auth:verify-password-reset-otp', email, token, newPassword),
+  resendPasswordResetOTP: (email: string) => ipcRenderer.invoke('auth:resend-password-reset-otp', email),
 };
 
 contextBridge.exposeInMainWorld('browserAPI', browserAPI);

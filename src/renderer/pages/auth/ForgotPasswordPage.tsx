@@ -1,22 +1,23 @@
 import { useState } from 'react';
-import { useAuth } from '@/renderer/hooks/useAuth';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/renderer/ui/card';
 import { Button } from '@/renderer/ui/button';
 import { Input } from '@/renderer/ui/input';
 import { Label } from '@/renderer/ui/label';
 import { Alert, AlertDescription } from '@/renderer/ui/alert';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Mail, Loader2, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Mail, Loader2 } from 'lucide-react';
 import { AuthLayout } from './AuthLayout';
+import { toast } from 'sonner';
 
 /**
  * Forgot Password Page
  * Route: /auth/forgot-password
  */
 export function ForgotPasswordPage() {
-  const { resetPassword, loading } = useAuth();
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
-  const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -28,57 +29,24 @@ export function ForgotPasswordPage() {
       return;
     }
 
-    const result = await resetPassword(email);
-    
-    if (result.success) {
-      setSubmitted(true);
-    } else if (result.error) {
-      setError(result.error);
+    setLoading(true);
+
+    try {
+      const result = await window.authAPI.sendPasswordResetOTP(email);
+      
+      if (result.success) {
+        toast.success('Verification code sent! Check your email.');
+        // Redirect to reset password page with email
+        navigate(`/auth/reset-password?email=${encodeURIComponent(email)}`);
+      } else {
+        setError(result.error || 'Failed to send reset code');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to send reset code');
+    } finally {
+      setLoading(false);
     }
   };
-
-  if (submitted) {
-    return (
-      <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 p-4">
-        <div className="w-full max-w-md">
-          <Card className="shadow-xl">
-            <CardHeader>
-              <div className="flex justify-center mb-4">
-                <CheckCircle className="h-12 w-12 text-green-600" />
-              </div>
-              <CardTitle className="text-center">Check Your Email</CardTitle>
-              <CardDescription className="text-center">
-                We've sent a password reset link to <strong>{email}</strong>
-              </CardDescription>
-            </CardHeader>
-            
-            <CardContent className="space-y-4">
-              <p className="text-sm text-slate-600 dark:text-slate-400 text-center">
-                Click the link in the email to reset your password. The link will expire in 1 hour.
-              </p>
-              
-              <div className="space-y-2">
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => setSubmitted(false)}
-                >
-                  Didn't receive the email? Try again
-                </Button>
-                
-                <Link to="/auth/signin">
-                  <Button variant="ghost" className="w-full">
-                    <ArrowLeft className="w-4 h-4 mr-2" />
-                    Back to Sign In
-                  </Button>
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
 
   return (
    <AuthLayout>
@@ -86,7 +54,7 @@ export function ForgotPasswordPage() {
           <CardHeader>
             <CardTitle>Reset Password</CardTitle>
             <CardDescription>
-              Enter your email address and we'll send you a link to reset your password
+              Enter your email address and we'll send you a verification code
             </CardDescription>
           </CardHeader>
           
@@ -126,7 +94,7 @@ export function ForgotPasswordPage() {
                     Sending...
                   </>
                 ) : (
-                  'Send Reset Link'
+                  'Send Verification Code'
                 )}
               </Button>
             </form>

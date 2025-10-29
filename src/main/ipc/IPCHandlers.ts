@@ -391,11 +391,6 @@ export class IPCHandlers {
       return this.authService.updateProfile(updates);
     });
 
-    // Reset password
-    ipcMain.handle('auth:reset-password', async (_, email: string) => {
-      return this.authService.resetPassword(email);
-    });
-
     // Verify email with OTP
     ipcMain.handle('auth:verify-otp', async (_, email: string, token: string) => {
       return this.authService.verifyEmailOTP(email, token);
@@ -404,6 +399,21 @@ export class IPCHandlers {
     // Resend verification OTP
     ipcMain.handle('auth:resend-otp', async (_, email: string) => {
       return this.authService.resendVerificationOTP(email);
+    });
+
+    // Send password reset OTP
+    ipcMain.handle('auth:send-password-reset-otp', async (_, email: string) => {
+      return this.authService.sendPasswordResetOTP(email);
+    });
+
+    // Verify password reset OTP and update password
+    ipcMain.handle('auth:verify-password-reset-otp', async (_, email: string, token: string, newPassword: string) => {
+      return this.authService.verifyPasswordResetOTP(email, token, newPassword);
+    });
+
+    // Resend password reset OTP
+    ipcMain.handle('auth:resend-password-reset-otp', async (_, email: string) => {
+      return this.authService.resendPasswordResetOTP(email);
     });
   }
 

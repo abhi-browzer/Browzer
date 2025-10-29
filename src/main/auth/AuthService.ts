@@ -490,11 +490,13 @@ export class AuthService {
   }
 
   /**
-   * Reset password
+   * Send password reset OTP to email
    */
-  async resetPassword(email: string): Promise<{ success: boolean; error?: string }> {
+  async sendPasswordResetOTP(email: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const { error } = await this.supabase.auth.resetPasswordForEmail(email);
+      const { error } = await this.supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: undefined, // No redirect, use OTP flow
+      });
 
       if (error) {
         return {
@@ -507,9 +509,84 @@ export class AuthService {
     } catch (error: any) {
       return {
         success: false,
-        error: error.message || 'An unexpected error occurred during password reset',
+        error: error.message || 'An unexpected error occurred while sending reset code',
       };
     }
+  }
+
+  /**
+   * Verify password reset OTP and update password
+   */
+  async verifyPasswordResetOTP(
+    email: string,
+    token: string,
+    newPassword: string
+  ): Promise<AuthResponse> {
+    try {
+      // First verify the OTP
+      const { data, error: verifyError } = await this.supabase.auth.verifyOtp({
+        email,
+        token,
+        type: 'recovery',
+      });
+
+      if (verifyError) {
+        return {
+          success: false,
+          error: {
+            code: verifyError.status?.toString() || 'VERIFY_ERROR',
+            message: verifyError.message,
+          },
+        };
+      }
+
+      if (!data.user || !data.session) {
+        return {
+          success: false,
+          error: {
+            code: 'NO_USER',
+            message: 'Invalid verification code',
+          },
+        };
+      }
+
+      // Now update the password
+      const { error: updateError } = await this.supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (updateError) {
+        return {
+          success: false,
+          error: {
+            code: updateError.status?.toString() || 'UPDATE_ERROR',
+            message: updateError.message,
+          },
+        };
+      }
+
+      // Session will be automatically persisted by auth state listener
+      return {
+        success: true,
+        user: this.mapSupabaseUser(data.user),
+        session: this.mapSupabaseSession(data.session),
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: {
+          code: 'RESET_EXCEPTION',
+          message: error.message || 'An unexpected error occurred during password reset',
+        },
+      };
+    }
+  }
+
+  /**
+   * Resend password reset OTP
+   */
+  async resendPasswordResetOTP(email: string): Promise<{ success: boolean; error?: string }> {
+    return this.sendPasswordResetOTP(email);
   }
 
   /**

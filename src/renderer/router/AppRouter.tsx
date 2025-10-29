@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { ProtectedRoute } from '@/renderer/components/auth/ProtectedRoute';
 import { SignInPage, SignUpPage, ForgotPasswordPage, VerifyOTPPage } from '@/renderer/pages/auth';
+import { ResetPasswordPage } from '@/renderer/pages/auth/ResetPasswordPage';
 import { BrowserChrome } from '@/renderer/components/BrowserChrome';
 import { InternalRouter, useIsInternalPage } from './InternalRouter';
 import NotFound from '@/renderer/pages/not-found';
@@ -20,6 +21,7 @@ export function AppRouter() {
         <Route path="/auth/signup" element={<SignUpPage />} />
         <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/auth/verify-otp" element={<VerifyOTPPage />} />
+        <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
         
         {/* Protected Main App Route */}
         <Route 
