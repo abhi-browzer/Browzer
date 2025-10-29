@@ -38,8 +38,8 @@ export class BrowserManager {
 
   constructor(
     private baseWindow: BaseWindow,
-    agentUIHeight: number,
-    agentUIView?: WebContentsView
+    browserUIHeight: number,
+    browserUIView?: WebContentsView
   ) {
     // Initialize services
     this.recordingStore = new RecordingStore();
@@ -62,7 +62,7 @@ export class BrowserManager {
 
     this.tabManager = new TabManager(
       baseWindow,
-      agentUIHeight,
+      browserUIHeight,
       this.passwordManager,
       this.historyService,
       this.navigationManager,
@@ -72,13 +72,13 @@ export class BrowserManager {
 
     this.recordingManager = new RecordingManager(
       this.recordingStore,
-      agentUIView
+      browserUIView
     );
 
     this.automationManager = new AutomationManager(
       this.recordingStore,
       this.sessionManager,
-      agentUIView
+      browserUIView
     );
   }
 

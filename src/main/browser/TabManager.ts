@@ -28,7 +28,7 @@ export class TabManager {
 
   constructor(
     private baseWindow: BaseWindow,
-    private agentUIHeight: number,
+    private browserUIHeight: number,
     private passwordManager: PasswordManager,
     private historyService: HistoryService,
     private navigationManager: NavigationManager,
@@ -291,9 +291,9 @@ export class TabManager {
     const bounds = this.baseWindow.getBounds();
     view.setBounds({
       x: 0,
-      y: this.agentUIHeight,
+      y: this.browserUIHeight,
       width: bounds.width - sidebarWidth,
-      height: bounds.height - this.agentUIHeight,
+      height: bounds.height - this.browserUIHeight,
     });
   }
 

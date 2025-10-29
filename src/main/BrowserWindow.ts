@@ -14,16 +14,16 @@ export class BrowserWindow {
     this.windowManager = new WindowManager();
     
     const baseWindow = this.windowManager.getWindow();
-    const agentUIView = this.windowManager.getAgentUIView();
+    const browserUIView = this.windowManager.getAgentUIView();
     const chromeHeight = this.windowManager.getChromeHeight();
 
-    if (!baseWindow || !agentUIView) {
+    if (!baseWindow || !browserUIView) {
       throw new Error('Failed to initialize window');
     }
     this.layoutManager = new LayoutManager(baseWindow, chromeHeight);
 
     // 3. Initialize browser manager (tabs + recording)
-    this.browserManager = new BrowserManager(baseWindow, chromeHeight, agentUIView);
+    this.browserManager = new BrowserManager(baseWindow, chromeHeight, browserUIView);
 
     // 4. Setup IPC communication
     this.ipcHandlers = new IPCHandlers(
@@ -45,7 +45,7 @@ export class BrowserWindow {
    * Update layout when sidebar state or window size changes
    */
   private updateLayout(): void {
-    const agentUIView = this.windowManager.getAgentUIView();
+    const browserUIView = this.windowManager.getAgentUIView();
     const baseWindow = this.windowManager.getWindow();
     
     if (!baseWindow) return;
@@ -57,9 +57,9 @@ export class BrowserWindow {
       : 0;
 
     // Update agent UI bounds
-    if (agentUIView) {
-      const agentUIBounds = this.layoutManager.calculateAgentUIBounds();
-      agentUIView.setBounds(agentUIBounds);
+    if (browserUIView) {
+      const browserUIBounds = this.layoutManager.calculateAgentUIBounds();
+      browserUIView.setBounds(browserUIBounds);
     }
 
     // Update browser manager with window dimensions and sidebar width

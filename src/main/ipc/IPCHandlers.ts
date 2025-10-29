@@ -252,7 +252,7 @@ export class IPCHandlers {
   }
 
   private updateLayout(): void {
-    const agentUIView = this.windowManager.getAgentUIView();
+    const browserUIView = this.windowManager.getAgentUIView();
     const baseWindow = this.windowManager.getWindow();
     
     if (!baseWindow) return;
@@ -263,9 +263,9 @@ export class IPCHandlers {
       ? Math.floor(bounds.width * (sidebarState.widthPercent / 100))
       : 0;
 
-    if (agentUIView) {
-      const agentUIBounds = this.layoutManager.calculateAgentUIBounds();
-      agentUIView.setBounds(agentUIBounds);
+    if (browserUIView) {
+      const browserUIBounds = this.layoutManager.calculateAgentUIBounds();
+      browserUIView.setBounds(browserUIBounds);
     }
     
     this.browserManager.updateLayout(bounds.width, bounds.height, sidebarWidth);

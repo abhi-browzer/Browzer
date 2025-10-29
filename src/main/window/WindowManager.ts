@@ -7,7 +7,7 @@ import path from 'node:path';
  */
 export class WindowManager {
   private baseWindow: BaseWindow | null = null;
-  private agentUIView: WebContentsView | null = null;
+  private browserUIView: WebContentsView | null = null;
   private readonly CHROME_HEIGHT = 88;
 
   constructor() {
@@ -29,7 +29,7 @@ export class WindowManager {
     });
 
     // Create Agent UI WebContentsView (trusted UI layer)
-    this.agentUIView = new WebContentsView({
+    this.browserUIView = new WebContentsView({
       webPreferences: {
         preload: path.join(__dirname, 'preload.js'),
         contextIsolation: true,
@@ -38,7 +38,7 @@ export class WindowManager {
       },
     });
 
-    this.baseWindow.contentView.addChildView(this.agentUIView);
+    this.baseWindow.contentView.addChildView(this.browserUIView);
     this.setupAgentUI();
     this.setupWindowEvents();
 
@@ -49,19 +49,19 @@ export class WindowManager {
 
     // Open DevTools in development
     if (process.env.NODE_ENV === 'development') {
-     this.agentUIView.webContents.openDevTools({ mode: 'detach' });
+     this.browserUIView.webContents.openDevTools({ mode: 'detach' });
     }
     // DevTools will only open via keyboard shortcut (Cmd+Shift+I) or context menu
   }
 
   private setupAgentUI(): void {
-    if (!this.agentUIView) return;
+    if (!this.browserUIView) return;
 
     // Load the agent UI (React app)
     if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-      this.agentUIView.webContents.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+      this.browserUIView.webContents.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
     } else {
-      this.agentUIView.webContents.loadFile(
+      this.browserUIView.webContents.loadFile(
         path.join(__dirname, `../../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`)
       );
     }
@@ -76,13 +76,13 @@ export class WindowManager {
 
     this.baseWindow.on('closed', () => {
       this.baseWindow = null;
-      this.agentUIView = null;
+      this.browserUIView = null;
     });
   }
 
   public updateLayout(bounds: { x: number; y: number; width: number; height: number }): void {
-    if (!this.agentUIView) return;
-    this.agentUIView.setBounds(bounds);
+    if (!this.browserUIView) return;
+    this.browserUIView.setBounds(bounds);
   }
 
   public getWindow(): BaseWindow | null {
@@ -90,7 +90,7 @@ export class WindowManager {
   }
 
   public getAgentUIView(): WebContentsView | null {
-    return this.agentUIView;
+    return this.browserUIView;
   }
 
   public getChromeHeight(): number {
