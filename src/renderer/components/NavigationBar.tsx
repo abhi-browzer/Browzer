@@ -1,9 +1,10 @@
 import { useState, useEffect, KeyboardEvent } from 'react';
-import { ArrowLeft, ArrowRight, RotateCw, X, Lock, Globe, Circle, Square, Settings, Clock, User, MoreVertical, Video, ChevronRight, ChevronLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, RotateCw, X, Lock, Globe, Circle, Square, Settings, Clock, User, MoreVertical, Video, ChevronRight, ChevronLeft, Loader2, LogOut } from 'lucide-react';
 import type { TabInfo } from '@/shared/types';
 import { cn } from '@/renderer/lib/utils';
 import { useSidebarStore } from '@/renderer/store/useSidebarStore';
 import { useRecording } from '@/renderer/hooks/useRecording';
+import { useAuth } from '@/renderer/hooks/useAuth';
 import { Input } from '@/renderer/ui/input';
 import ThemeToggle from '@/renderer/ui/theme-toggle';
 import { Button } from '@/renderer/ui/button';
@@ -36,6 +37,7 @@ export function NavigationBar({
   const [isEditing, setIsEditing] = useState(false);
   const { isVisible: isSidebarVisible, toggleSidebar } = useSidebarStore();
   const { isRecording, isLoading, toggleRecording } = useRecording();
+  const { user, signOut, loading } = useAuth();
 
   // Update URL input when active tab changes
   useEffect(() => {
@@ -54,6 +56,10 @@ export function NavigationBar({
       setIsEditing(false);
       (e.target as HTMLInputElement).blur();
     }
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
   };
 
   const isSecure = activeTab?.url.startsWith('https://');
@@ -160,7 +166,7 @@ export function NavigationBar({
             <MoreVertical className="w-4 h-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-56">
+<DropdownMenuContent align="end" className="w-56">
           <DropdownMenuItem onClick={() => onNavigate('browzer://recordings')}>
             <Video className="w-4 h-4 mr-2" />
             Recordings
@@ -181,6 +187,19 @@ export function NavigationBar({
           <DropdownMenuItem onClick={() => onNavigate('browzer://settings')}>
             <Settings className="w-4 h-4 mr-2" />
             Settings
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem 
+            onClick={handleSignOut}
+            disabled={loading}
+            variant='destructive'
+          >
+            {loading ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <LogOut className="w-4 h-4 mr-2" />
+            )}
+            Sign Out
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

@@ -59,33 +59,11 @@ export function AuthGuard({ children }: AuthGuardProps) {
   return <>{children}</>;
 }
 
-/**
- * Loading Screen Component
- * Reusable loading UI
- */
 function LoadingScreen({ message }: { message: string }) {
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-slate-50 dark:bg-slate-900">
-      <div className="text-center">
-        <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
-        <p className="text-slate-600 dark:text-slate-400">{message}</p>
-      </div>
-    </div>
+    <section className='h-screen flex flex-col items-center justify-center'>
+      <Loader2 className='size-4 font-bold'/>
+      <p className="text-slate-600 dark:text-slate-400">{message}</p>
+    </section>
   );
 }
-
-/**
- * Usage:
- * 
- * Wrap your protected routes/components:
- * 
- * <AuthGuard>
- *   <YourProtectedComponent />
- * </AuthGuard>
- * 
- * The guard will:
- * 1. Show loading while checking auth
- * 2. Show auth screen if not logged in
- * 3. Initialize browser when authenticated
- * 4. Show your component when ready
- */
