@@ -8,7 +8,6 @@ import path from 'node:path';
 export class WindowManager {
   private baseWindow: BaseWindow | null = null;
   private browserUIView: WebContentsView | null = null;
-  private readonly CHROME_HEIGHT = 88;
 
   constructor() {
     this.createWindow();
@@ -23,7 +22,6 @@ export class WindowManager {
       minHeight: 700,
       titleBarStyle: 'hiddenInset',
       trafficLightPosition: { x: 10, y: 10 },
-      backgroundColor: '#fff',
       show: false,
       // fullscreenable: false, // Prevent fullscreen mode to keep traffic lights always visible
     });
@@ -91,10 +89,6 @@ export class WindowManager {
 
   public getAgentUIView(): WebContentsView | null {
     return this.browserUIView;
-  }
-
-  public getChromeHeight(): number {
-    return this.CHROME_HEIGHT;
   }
 
   public destroy(): void {

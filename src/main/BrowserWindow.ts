@@ -15,15 +15,14 @@ export class BrowserWindow {
     
     const baseWindow = this.windowManager.getWindow();
     const browserUIView = this.windowManager.getAgentUIView();
-    const chromeHeight = this.windowManager.getChromeHeight();
 
     if (!baseWindow || !browserUIView) {
       throw new Error('Failed to initialize window');
     }
-    this.layoutManager = new LayoutManager(baseWindow, chromeHeight);
+    this.layoutManager = new LayoutManager(baseWindow);
 
     // 3. Initialize browser manager (tabs + recording)
-    this.browserManager = new BrowserManager(baseWindow, chromeHeight, browserUIView);
+    this.browserManager = new BrowserManager(baseWindow, browserUIView);
 
     // 4. Setup IPC communication
     this.ipcHandlers = new IPCHandlers(

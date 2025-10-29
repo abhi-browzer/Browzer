@@ -26,9 +26,10 @@ export class TabManager {
   private tabCounter = 0;
   private currentSidebarWidth = 0;
 
+  private readonly webContentsViewHeight = 88;
+
   constructor(
     private baseWindow: BaseWindow,
-    private browserUIHeight: number,
     private passwordManager: PasswordManager,
     private historyService: HistoryService,
     private navigationManager: NavigationManager,
@@ -135,8 +136,6 @@ export class TabManager {
         this.switchToTab(remainingTabs[0]);
       } else {
         this.activeTabId = null;
-        // Create a new tab if all tabs are closed
-        this.createTab('https://www.google.com');
       }
     }
 
@@ -291,9 +290,9 @@ export class TabManager {
     const bounds = this.baseWindow.getBounds();
     view.setBounds({
       x: 0,
-      y: this.browserUIHeight,
+      y: this.webContentsViewHeight,
       width: bounds.width - sidebarWidth,
-      height: bounds.height - this.browserUIHeight,
+      height: bounds.height - this.webContentsViewHeight,
     });
   }
 

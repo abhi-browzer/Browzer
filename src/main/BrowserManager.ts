@@ -38,7 +38,6 @@ export class BrowserManager {
 
   constructor(
     private baseWindow: BaseWindow,
-    browserUIHeight: number,
     browserUIView?: WebContentsView
   ) {
     // Initialize services
@@ -62,7 +61,6 @@ export class BrowserManager {
 
     this.tabManager = new TabManager(
       baseWindow,
-      browserUIHeight,
       this.passwordManager,
       this.historyService,
       this.navigationManager,
