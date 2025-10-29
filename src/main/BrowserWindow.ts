@@ -2,12 +2,14 @@ import { BrowserManager } from '@/main/BrowserManager';
 import { WindowManager } from '@/main/window/WindowManager';
 import { LayoutManager } from '@/main/window/LayoutManager';
 import { IPCHandlers } from '@/main/ipc/IPCHandlers';
+import { DeepLinkService } from '@/main/deeplink/DeepLinkService';
 
 export class BrowserWindow {
   private windowManager: WindowManager;
   private layoutManager: LayoutManager;
   private browserManager: BrowserManager;
   private ipcHandlers: IPCHandlers;
+  private deepLinkService: DeepLinkService;
 
   constructor() {
     // 1. Initialize window and views
@@ -21,15 +23,19 @@ export class BrowserWindow {
     }
     this.layoutManager = new LayoutManager(baseWindow);
 
-    // 3. Initialize browser manager (tabs + recording)
+    // 2. Initialize browser manager (tabs + recording)
     this.browserManager = new BrowserManager(baseWindow, browserUIView);
 
-    // 4. Setup IPC communication
+    // 3. Setup IPC communication
     this.ipcHandlers = new IPCHandlers(
       this.browserManager,
       this.layoutManager,
       this.windowManager
     );
+
+    // 4. Initialize deep link service
+    this.deepLinkService = DeepLinkService.getInstance();
+    this.deepLinkService.setWindow(baseWindow, browserUIView.webContents);
 
     // 5. Initial layout
     this.updateLayout();

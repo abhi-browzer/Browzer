@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { getInternalRoutePaths, getRouteFromURL } from '@/shared/routes';
+import { getRouteFromURL } from '@/shared/routes';
 
 /**
  * NavigationManager - URL normalization and browzer:// protocol handler

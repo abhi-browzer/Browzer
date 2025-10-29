@@ -19,18 +19,9 @@ export function useDeepLink() {
 
       if (data.showInTab) {
         navigate('/');
-        // IN-TAB: Show BrowserChrome, load page in tab
         await window.browserAPI.showAllTabs();
-        
-        // Navigate to root to show BrowserChrome (not hash route)
-        if (window.location.hash) {
-          window.location.hash = '';
-        }
-        
-        // Load browzer:// URL in tab
         await window.browserAPI.navigateToTab(data.url);
       } else {
-        // FULLSCREEN: Hide tabs, show auth page in React
         await window.browserAPI.hideAllTabs();
         navigate(route.path);
       }
