@@ -81,8 +81,46 @@ export class BrowserManager {
       agentUIView
     );
 
-    // Create initial tab
-    this.tabManager.createTab('https://www.google.com');
+    // Don't create initial tab - wait for authentication
+    // Tab will be created after user authenticates via initializeBrowser()
+  }
+
+  // ============================================================================
+  // Initialization
+  // ============================================================================
+
+  /**
+   * Initialize browser after authentication
+   * Creates the first tab and shows browser UI
+   */
+  public initializeBrowser(): void {
+    // Create initial tab only if no tabs exist
+    const { tabs } = this.getAllTabs();
+    if (tabs.length === 0) {
+      this.tabManager.createTab('https://www.google.com');
+    }
+  }
+
+  /**
+   * Check if browser has been initialized (has tabs)
+   */
+  public isInitialized(): boolean {
+    const { tabs } = this.getAllTabs();
+    return tabs.length > 0;
+  }
+
+  /**
+   * Hide all browser tabs (for showing auth UI)
+   */
+  public hideAllTabs(): void {
+    this.tabManager.hideAllTabs();
+  }
+
+  /**
+   * Show active tab (after authentication)
+   */
+  public showActiveTab(): void {
+    this.tabManager.showActiveTab();
   }
 
   // ============================================================================

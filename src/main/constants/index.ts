@@ -6,6 +6,10 @@ export interface InternalPage {
 
 export const INTERNAL_PAGES: InternalPage[] = [
     {
+        title: 'Authentication',
+        path: 'auth',
+    },
+    {
         title: 'Settings',
         path: 'settings',
     },

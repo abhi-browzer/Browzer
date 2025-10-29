@@ -1,9 +1,24 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { contextBridge, ipcRenderer, desktopCapturer } from 'electron';
-import { HistoryEntry, HistoryQuery, HistoryStats, TabInfo, AppSettings } from '@/shared/types';
+import { 
+  HistoryEntry, 
+  HistoryQuery, 
+  HistoryStats, 
+  TabInfo, 
+  AppSettings,
+  SignUpCredentials,
+  SignInCredentials,
+  AuthResponse,
+  User,
+  Session
+} from '@/shared/types';
 
 
 export interface BrowserAPI {
+  // Browser Initialization
+  initializeBrowser: () => Promise<boolean>;
+  isBrowserInitialized: () => Promise<boolean>;
+
   // Tab Management
   createTab: (url?: string) => Promise<TabInfo>;
   closeTab: (tabId: string) => Promise<boolean>;
@@ -104,11 +119,30 @@ export interface BrowserAPI {
   onAutomationProgress: (callback: (data: { sessionId: string; event: any }) => void) => () => void;
   onAutomationComplete: (callback: (data: { sessionId: string; result: any }) => void) => () => void;
   onAutomationError: (callback: (data: { sessionId: string; error: string }) => void) => () => void;
+
+  // Authentication
+  signUp: (credentials: SignUpCredentials) => Promise<AuthResponse>;
+  signIn: (credentials: SignInCredentials) => Promise<AuthResponse>;
+  signInWithGoogle: () => Promise<AuthResponse>;
+  signOut: () => Promise<AuthResponse>;
+  getSession: () => Promise<Session | null>;
+  getUser: () => Promise<User | null>;
+  isAuthenticated: () => Promise<boolean>;
+  resetPassword: (email: string) => Promise<AuthResponse>;
+  updatePassword: (newPassword: string) => Promise<AuthResponse>;
+  updateUserMetadata: (metadata: Record<string, unknown>) => Promise<AuthResponse>;
+  handleOAuthCallback: (url: string) => Promise<AuthResponse>;
+  
+  // Auth event listeners
+  onAuthStateChanged: (callback: (data: { user: User | null; session: Session | null }) => void) => () => void;
 }
 
 // Expose protected methods that allow the renderer process to use
 // ipcRenderer without exposing the entire object
 const browserAPI: BrowserAPI = {
+  initializeBrowser: () => ipcRenderer.invoke('browser:initialize'),
+  isBrowserInitialized: () => ipcRenderer.invoke('browser:is-initialized'),
+
   createTab: (url?: string) => ipcRenderer.invoke('browser:create-tab', url),
   closeTab: (tabId: string) => ipcRenderer.invoke('browser:close-tab', tabId),
   switchTab: (tabId: string) => ipcRenderer.invoke('browser:switch-tab', tabId),
@@ -275,6 +309,37 @@ const browserAPI: BrowserAPI = {
     const subscription = (_: any, data: any) => callback(data);
     ipcRenderer.on('automation:error', subscription);
     return () => ipcRenderer.removeListener('automation:error', subscription);
+  },
+
+  // Authentication API
+  signUp: (credentials: SignUpCredentials) => 
+    ipcRenderer.invoke('auth:sign-up', credentials),
+  signIn: (credentials: SignInCredentials) => 
+    ipcRenderer.invoke('auth:sign-in', credentials),
+  signInWithGoogle: () => 
+    ipcRenderer.invoke('auth:sign-in-google'),
+  signOut: () => 
+    ipcRenderer.invoke('auth:sign-out'),
+  getSession: () => 
+    ipcRenderer.invoke('auth:get-session'),
+  getUser: () => 
+    ipcRenderer.invoke('auth:get-user'),
+  isAuthenticated: () => 
+    ipcRenderer.invoke('auth:is-authenticated'),
+  resetPassword: (email: string) => 
+    ipcRenderer.invoke('auth:reset-password', email),
+  updatePassword: (newPassword: string) => 
+    ipcRenderer.invoke('auth:update-password', newPassword),
+  updateUserMetadata: (metadata: Record<string, unknown>) => 
+    ipcRenderer.invoke('auth:update-user-metadata', metadata),
+  handleOAuthCallback: (url: string) => 
+    ipcRenderer.invoke('auth:handle-oauth-callback', url),
+
+  // Auth event listeners
+  onAuthStateChanged: (callback) => {
+    const subscription = (_: any, data: any) => callback(data);
+    ipcRenderer.on('auth:state-changed', subscription);
+    return () => ipcRenderer.removeListener('auth:state-changed', subscription);
   },
 };
 

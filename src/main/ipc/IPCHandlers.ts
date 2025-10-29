@@ -5,7 +5,8 @@ import { LayoutManager } from '@/main/window/LayoutManager';
 import { WindowManager } from '@/main/window/WindowManager';
 import { SettingsStore } from '@/main/settings/SettingsStore';
 import { PasswordManager } from '@/main/password/PasswordManager';
-import { RecordedAction, HistoryQuery, AppSettings } from '@/shared/types';
+import { AuthService } from '@/main/auth';
+import { RecordedAction, HistoryQuery, AppSettings, SignUpCredentials, SignInCredentials } from '@/shared/types';
 
 /**
  * IPCHandlers - Centralized IPC communication setup
@@ -14,6 +15,7 @@ import { RecordedAction, HistoryQuery, AppSettings } from '@/shared/types';
 export class IPCHandlers {
   private settingsStore: SettingsStore;
   private passwordManager: PasswordManager;
+  private authService: AuthService;
 
   constructor(
     private browserManager: BrowserManager,
@@ -23,12 +25,14 @@ export class IPCHandlers {
     this.settingsStore = new SettingsStore();
     // Use the existing PasswordManager from BrowserManager instead of creating a new one
     this.passwordManager = this.browserManager.getPasswordManager();
+    this.authService = new AuthService();
     this.setupHandlers();
 
     console.log('IPCHandlers initialized');
   }
 
   private setupHandlers(): void {
+    this.setupBrowserHandlers();
     this.setupTabHandlers();
     this.setupNavigationHandlers();
     this.setupSidebarHandlers();
@@ -38,6 +42,20 @@ export class IPCHandlers {
     this.setupPasswordHandlers();
     this.setupWindowHandlers();
     this.setupAutomationHandlers();
+    this.setupAuthHandlers();
+  }
+
+  private setupBrowserHandlers(): void {
+    // Initialize browser after authentication
+    ipcMain.handle('browser:initialize', async () => {
+      this.browserManager.initializeBrowser();
+      return true;
+    });
+
+    // Check if browser is initialized
+    ipcMain.handle('browser:is-initialized', async () => {
+      return this.browserManager.isInitialized();
+    });
   }
 
   private setupTabHandlers(): void {
@@ -344,7 +362,69 @@ export class IPCHandlers {
     });
   }
 
+  /**
+   * Authentication handlers
+   */
+  private setupAuthHandlers(): void {
+    // Sign up
+    ipcMain.handle('auth:sign-up', async (_, credentials: SignUpCredentials) => {
+      return await this.authService.signUp(credentials);
+    });
+
+    // Sign in
+    ipcMain.handle('auth:sign-in', async (_, credentials: SignInCredentials) => {
+      return await this.authService.signIn(credentials);
+    });
+
+    // Sign in with Google
+    ipcMain.handle('auth:sign-in-google', async () => {
+      return await this.authService.signInWithGoogle();
+    });
+
+    // Sign out
+    ipcMain.handle('auth:sign-out', async () => {
+      return await this.authService.signOut();
+    });
+
+    // Get current session
+    ipcMain.handle('auth:get-session', async () => {
+      return this.authService.getSession();
+    });
+
+    // Get current user
+    ipcMain.handle('auth:get-user', async () => {
+      return this.authService.getUser();
+    });
+
+    // Check if authenticated
+    ipcMain.handle('auth:is-authenticated', async () => {
+      return this.authService.isAuthenticated();
+    });
+
+    // Reset password
+    ipcMain.handle('auth:reset-password', async (_, email: string) => {
+      return await this.authService.resetPassword(email);
+    });
+
+    // Update password
+    ipcMain.handle('auth:update-password', async (_, newPassword: string) => {
+      return await this.authService.updatePassword(newPassword);
+    });
+
+    // Update user metadata
+    ipcMain.handle('auth:update-user-metadata', async (_, metadata: Record<string, unknown>) => {
+      return await this.authService.updateUserMetadata(metadata);
+    });
+
+    // Handle OAuth callback
+    ipcMain.handle('auth:handle-oauth-callback', async (_, url: string) => {
+      return await this.authService.handleOAuthCallback(url);
+    });
+  }
+
   public cleanup(): void {
+    ipcMain.removeAllListeners('browser:initialize');
+    ipcMain.removeAllListeners('browser:is-initialized');
     ipcMain.removeAllListeners('browser:create-tab');
     ipcMain.removeAllListeners('browser:close-tab');
     ipcMain.removeAllListeners('browser:switch-tab');
@@ -402,5 +482,21 @@ export class IPCHandlers {
     ipcMain.removeAllListeners('automation:generate-plan');
     ipcMain.removeAllListeners('automation:get-status');
     ipcMain.removeAllListeners('automation:cancel');
+    
+    // Auth handlers cleanup
+    ipcMain.removeAllListeners('auth:sign-up');
+    ipcMain.removeAllListeners('auth:sign-in');
+    ipcMain.removeAllListeners('auth:sign-in-google');
+    ipcMain.removeAllListeners('auth:sign-out');
+    ipcMain.removeAllListeners('auth:get-session');
+    ipcMain.removeAllListeners('auth:get-user');
+    ipcMain.removeAllListeners('auth:is-authenticated');
+    ipcMain.removeAllListeners('auth:reset-password');
+    ipcMain.removeAllListeners('auth:update-password');
+    ipcMain.removeAllListeners('auth:update-user-metadata');
+    ipcMain.removeAllListeners('auth:handle-oauth-callback');
+    
+    // Cleanup auth service
+    this.authService.destroy();
   }
 }

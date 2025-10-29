@@ -477,4 +477,36 @@ export class TabManager {
       console.error('[TabManager] Error auto-filling password:', error);
     }
   }
+
+  /**
+   * Hide all tabs (remove from window)
+   * Used when showing auth UI
+   */
+  public hideAllTabs(): void {
+    this.tabs.forEach(tab => {
+      try {
+        this.baseWindow.contentView.removeChildView(tab.view);
+      } catch (error) {
+        console.error('[TabManager] Error hiding tab:', error);
+      }
+    });
+  }
+
+  /**
+   * Show active tab (add back to window)
+   * Used after authentication
+   */
+  public showActiveTab(): void {
+    if (!this.activeTabId) return;
+    
+    const activeTab = this.tabs.get(this.activeTabId);
+    if (activeTab) {
+      try {
+        this.baseWindow.contentView.addChildView(activeTab.view);
+        this.updateTabViewBounds(activeTab.view, this.currentSidebarWidth);
+      } catch (error) {
+        console.error('[TabManager] Error showing active tab:', error);
+      }
+    }
+  }
 }

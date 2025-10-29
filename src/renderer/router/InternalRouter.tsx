@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react';
-import { History, Recordings, Automation, Settings } from '@/renderer/screens';
+import { History, Recordings, Automation, Settings, Auth } from '@/renderer/screens';
 
 /**
  * Internal page routes configuration
  * Maps browzer:// URLs to their corresponding React components
  */
 export const INTERNAL_ROUTES = {
+  auth: {
+    path: '/auth',
+    component: Auth,
+    title: 'Authentication',
+  },
   settings: {
     path: '/settings',
     component: Settings,
