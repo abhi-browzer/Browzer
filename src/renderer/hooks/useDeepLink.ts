@@ -52,6 +52,11 @@ export function useDeepLink() {
         // IN-TAB ROUTES: Settings, history, recordings, etc.
         console.log('[useDeepLink] 📑 IN-TAB route - loading in tab');
         
+        // CRITICAL: Navigate browserUI back to main app (/) to show BrowserChrome
+        // This ensures we're not stuck on an auth route
+        console.log('[useDeepLink] 🔄 Navigating browserUI to main app');
+        navigate('/');
+        
         // Show tabs if they were hidden
         await window.browserAPI.showAllTabs();
         
