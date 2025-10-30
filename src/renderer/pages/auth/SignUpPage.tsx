@@ -6,7 +6,7 @@ import { useAuth } from '@/renderer/hooks/useAuth';
 import { Button } from '@/renderer/ui/button';
 import { Input } from '@/renderer/ui/input';
 import { Label } from '@/renderer/ui/label';
-import { Loader2, Mail, Lock, User, Chrome } from 'lucide-react';
+import { Loader2, Mail, Lock, User, Chrome, EyeOff, Eye } from 'lucide-react';
 import { Separator } from '@/renderer/ui/separator';
 import { FaGoogle } from 'react-icons/fa';
 import { toast } from 'sonner';
@@ -21,16 +21,12 @@ export function SignUpPage() {
   const [display_name, setdisplay_name] = useState('');
   const [email, setEmail] = useState(''); 
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
-  const validatePassword = (pass: string, confirm: string) => {
+  const validatePassword = (pass: string) => {
     if (pass.length < 6) {
       setPasswordError('Password must be at least 6 characters');
-      return false;
-    }
-    if (pass !== confirm) {
-      setPasswordError('Passwords do not match');
       return false;
     }
     setPasswordError('');
@@ -40,11 +36,13 @@ export function SignUpPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!email || !password || !confirmPassword) {
+    if (!email || !password) {
+      toast.error('Email and password are required');
       return;
     }
 
-    if (!validatePassword(password, confirmPassword)) {
+    if (!validatePassword(password)) {
+      toast.error(passwordError);
       return;
     }
 
@@ -115,50 +113,34 @@ export function SignUpPage() {
           <div className="relative">
             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <Input
-              id="signup-password"
-              type="password"
+              id="newPassword"
+              type={showPassword ? 'text' : 'password'}
               placeholder="••••••••"
               value={password}
               onChange={(e) => {
                 setPassword(e.target.value);
-                if (confirmPassword) {
-                  validatePassword(e.target.value, confirmPassword);
-                }
               }}
               disabled={loading}
-              className="pl-10"
+              className="pl-10 pr-10"
               required
             />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+            >
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
           </div>
           <p className="text-xs text-slate-500">
             Must be at least 6 characters
           </p>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="confirm-password">Confirm Password</Label>
-          <div className="relative">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <Input
-              id="confirm-password"
-              type="password"
-              placeholder="••••••••"
-              value={confirmPassword}
-              onChange={(e) => {
-                setConfirmPassword(e.target.value);
-                validatePassword(password, e.target.value);
-              }}
-              disabled={loading}
-              className="pl-10"
-              required
-            />
-          </div>
-        </div>
-
         <Button
           type="submit"
           className="w-full"
-          disabled={loading || !email || !password || !confirmPassword || !!passwordError}
+          disabled={loading || !email || !password || !!passwordError}
         >
           {loading ? (
             <>
