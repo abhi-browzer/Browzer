@@ -3,11 +3,13 @@ import { WindowManager } from '@/main/window/WindowManager';
 import { LayoutManager } from '@/main/window/LayoutManager';
 import { IPCHandlers } from '@/main/ipc/IPCHandlers';
 import { DeepLinkService } from '@/main/deeplink/DeepLinkService';
+import { ConnectionManager, ConnectionManagerConfig } from './api';
 
 export class BrowserWindow {
   private windowManager: WindowManager;
   private layoutManager: LayoutManager;
   private browserManager: BrowserManager;
+  private connectionManager: ConnectionManager;
   private ipcHandlers: IPCHandlers;
   private deepLinkService: DeepLinkService;
 
@@ -26,11 +28,21 @@ export class BrowserWindow {
     // 2. Initialize browser manager (tabs + recording)
     this.browserManager = new BrowserManager(baseWindow, browserUIView);
 
-    // 3. Setup IPC communication
+    // 3. Initialize connection manager
+    const connectionConfig: ConnectionManagerConfig = {
+      apiBaseURL: process.env.BACKEND_API_URL || 'http://localhost:8080',
+      apiKey: process.env.BACKEND_API_KEY || '',
+      healthCheckInterval: 60000, // 1 minute
+    };
+    
+    this.connectionManager = new ConnectionManager(connectionConfig);
+
+    // 4. Setup IPC communication
     this.ipcHandlers = new IPCHandlers(
       this.browserManager,
       this.layoutManager,
-      this.windowManager
+      this.windowManager,
+      this.connectionManager
     );
 
     // 4. Initialize deep link service
