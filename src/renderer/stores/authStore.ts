@@ -27,7 +27,7 @@ interface AuthStore extends AuthState {
 }
 
 const initialState: AuthState = {
-  isAuthenticated: false,
+  is_authenticated: false,
   user: null,
   session: null,
   loading: true, // Start loading until initialized
@@ -38,7 +38,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
   ...initialState,
   initialized: false,
 
-  setUser: (user) => set({ user, isAuthenticated: !!user }),
+  setUser: (user) => set({ user, is_authenticated: !!user }),
   
   setSession: (session) => set({ session }),
   
@@ -52,7 +52,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     set({ 
       user, 
       session, 
-      isAuthenticated: true,
+      is_authenticated: true,
       error: null 
     }),
   

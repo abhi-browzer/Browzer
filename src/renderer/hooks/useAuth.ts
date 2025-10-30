@@ -1,6 +1,6 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { useAuthStore } from '@/renderer/stores/authStore';
-import { SignUpCredentials, SignInCredentials, AuthResponse } from '@/shared/types';
+import { SignUpCredentials, SignInCredentials, AuthResponse, UpdateProfileRequest } from '@/shared/types';
 import { toast } from 'sonner';
 
 /**
@@ -246,7 +246,7 @@ export function useAuth() {
    * Update user profile
    */
   const updateProfile = useCallback(
-    async (updates: { displayName?: string; photoURL?: string }): Promise<AuthResponse> => {
+    async (updates: UpdateProfileRequest): Promise<AuthResponse> => {
       const store = useAuthStore.getState();
       
       try {
@@ -316,7 +316,7 @@ export function useAuth() {
   // Return state and actions
   return {
     // State (read-only)
-    isAuthenticated: state.isAuthenticated,
+    isAuthenticated: state.is_authenticated,
     user: state.user,
     session: state.session,
     loading: state.loading,

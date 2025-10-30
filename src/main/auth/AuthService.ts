@@ -1,97 +1,69 @@
-import { SupabaseClient, Session, User as SupabaseUser } from '@supabase/supabase-js';
 import { BrowserWindow } from 'electron';
 import Store from 'electron-store';
-import { User, AuthSession, AuthResponse, SignUpCredentials, SignInCredentials } from '@/shared/types';
-import { getSupabaseClient } from './supabase';
-import { BrowserManager } from '../BrowserManager';
+import {
+  User,
+  AuthSession,
+  AuthResponse,
+  SignUpCredentials,
+  SignInCredentials,
+  UpdateProfileRequest,
+  SimpleResponse,
+} from '@/shared/types';
+import { BrowserManager } from '@/main/BrowserManager';
+import { ConnectionManager } from '@/main/api/ConnectionManager';
+import { api } from '@/main/api';
 
-/**
- * AuthService - Manages authentication with Supabase
- * 
- * Features:
- * - Email/Password authentication
- * - Google OAuth (via PKCE flow)
- * - Session persistence using electron-store
- * - Automatic token refresh
- * - Secure session storage
- */
 export class AuthService {
-  private supabase: SupabaseClient;
   private sessionStore: Store;
   private refreshTimer: NodeJS.Timeout | null = null;
   private authWindow: BrowserWindow | null = null;
-
+  private connectionManager: ConnectionManager;
   private readonly browserManager: BrowserManager;
 
+  
+
   constructor(
-    browserManager: BrowserManager
+    browserManager: BrowserManager,
+    connectionManager: ConnectionManager
   ) {
     this.browserManager = browserManager;
-    this.supabase = getSupabaseClient();
+    this.connectionManager = connectionManager;
 
     // Initialize secure session storage
     this.sessionStore = new Store({
       name: 'auth-session',
-      encryptionKey: 'browzer-auth-encryption-key', // In production, use a more secure key
+      encryptionKey: 'browzer-auth-encryption-key', // In production, use env variable
     });
-
-    // Setup auth state change listener
-    this.setupAuthStateListener();
 
     // Restore session on startup
     this.restoreSession();
   }
 
   /**
-   * Setup listener for auth state changes
-   */
-  private setupAuthStateListener(): void {
-    this.supabase.auth.onAuthStateChange((event, session) => {
-      
-      if (event === 'SIGNED_IN' && session) {
-        this.persistSession(session);
-        this.scheduleTokenRefresh(session);
-      } else if (event === 'SIGNED_OUT') {
-        this.clearSession();
-        this.cancelTokenRefresh();
-      } else if (event === 'TOKEN_REFRESHED' && session) {
-        this.persistSession(session);
-        this.scheduleTokenRefresh(session);
-      }
-    });
-  }
-
-  /**
    * Sign up with email and password
-   * Uses email OTP for verification instead of magic links
    */
   async signUp(credentials: SignUpCredentials): Promise<AuthResponse> {
     try {
-      const result = await this.supabase.auth.signUp({
-        email: credentials.email,
-        password: credentials.password,
-        options: {
-          data: {
-            display_name: credentials.displayName,
-          },
-          // Use email OTP instead of confirmation link
-          emailRedirectTo: undefined,
-        },
-      });
+      const response = await api.post<AuthResponse>(
+        '/api/v1/auth/signup',
+        {
+          email: credentials.email,
+          password: credentials.password,
+          display_name: credentials.display_name || null,
+        }
+      );
 
-      if (result.error) {
+      if (!response.success) {
         return {
           success: false,
           error: {
-            code: result.error.status?.toString() || 'SIGNUP_ERROR',
-            message: result.error.message,
+            code: 'SIGNUP_FAILED',
+            message: response.error || 'Sign up failed',
           },
         };
       }
 
-      return {
-        success: true,
-      };
+      return response.data;
     } catch (error: any) {
       return {
         success: false,
@@ -108,36 +80,33 @@ export class AuthService {
    */
   async signIn(credentials: SignInCredentials): Promise<AuthResponse> {
     try {
-      const { data, error } = await this.supabase.auth.signInWithPassword({
-        email: credentials.email,
-        password: credentials.password,
-      });
+      const response = await api.post<AuthResponse>(
+        '/api/v1/auth/signin',
+        {
+          email: credentials.email,
+          password: credentials.password,
+        }
+      );
 
-      if (error) {
+      if (!response.success || !response.data) {
         return {
           success: false,
           error: {
-            code: error.status?.toString() || 'SIGNIN_ERROR',
-            message: error.message,
+            code: 'SIGNIN_FAILED',
+            message: response.error || 'Sign in failed',
           },
         };
       }
 
-      if (!data.user || !data.session) {
-        return {
-          success: false,
-          error: {
-            code: 'NO_USER_DATA',
-            message: 'Sign in succeeded but no user data returned',
-          },
-        };
+      const authResponse = response.data;
+
+      // If sign in successful, persist session
+      if (authResponse.success && authResponse.session) {
+        this.persistSession(authResponse.session);
+        this.scheduleTokenRefresh(authResponse.session);
       }
 
-      return {
-        success: true,
-        user: this.mapSupabaseUser(data.user),
-        session: this.mapSupabaseSession(data.session),
-      };
+      return authResponse;
     } catch (error: any) {
       return {
         success: false,
@@ -150,136 +119,17 @@ export class AuthService {
   }
 
   /**
-   * Sign in with Google OAuth (PKCE flow)
+   * Sign in with Google OAuth
+   * TODO: Implement OAuth flow through backend
    */
   async signInWithGoogle(): Promise<AuthResponse> {
-    try {
-      const { data, error } = await this.supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          skipBrowserRedirect: true,
-          redirectTo: 'browzer://auth/callback',
-        },
-      });
-
-      if (error) {
-        return {
-          success: false,
-          error: {
-            code: error.status?.toString() || 'OAUTH_ERROR',
-            message: error.message,
-          },
-        };
-      }
-
-      // Open OAuth URL in external browser window
-      const authUrl = data.url;
-      if (!authUrl) {
-        return {
-          success: false,
-          error: {
-            code: 'NO_AUTH_URL',
-            message: 'No authentication URL returned',
-          },
-        };
-      }
-
-      // Create auth window
-      return await this.handleOAuthFlow(authUrl);
-    } catch (error: any) {
-      return {
-        success: false,
-        error: {
-          code: 'OAUTH_EXCEPTION',
-          message: error.message || 'An unexpected error occurred during OAuth',
-        },
-      };
-    }
-  }
-
-  /**
-   * Handle OAuth flow in a separate window
-   */
-  private async handleOAuthFlow(authUrl: string): Promise<AuthResponse> {
-    return new Promise((resolve) => {
-      // Create a new window for OAuth
-      this.authWindow = new BrowserWindow({
-        width: 500,
-        height: 700,
-        show: true,
-        webPreferences: {
-          nodeIntegration: false,
-          contextIsolation: true,
-        },
-      });
-
-      this.authWindow.loadURL(authUrl);
-
-      // Listen for navigation to callback URL
-      this.authWindow.webContents.on('will-redirect', async (event, url) => {
-        if (url.startsWith('browzer://auth/callback')) {
-          event.preventDefault();
-          
-          // Extract tokens from URL
-          const urlParams = new URL(url);
-          const accessToken = urlParams.searchParams.get('access_token');
-          const refreshToken = urlParams.searchParams.get('refresh_token');
-
-          if (accessToken && refreshToken) {
-            // Set session with tokens
-            const { data, error } = await this.supabase.auth.setSession({
-              access_token: accessToken,
-              refresh_token: refreshToken,
-            });
-
-            if (this.authWindow) {
-              this.authWindow.close();
-              this.authWindow = null;
-            }
-
-            if (error || !data.user || !data.session) {
-              resolve({
-                success: false,
-                error: {
-                  code: 'SESSION_ERROR',
-                  message: error?.message || 'Failed to establish session',
-                },
-              });
-            } else {
-              resolve({
-                success: true,
-                user: this.mapSupabaseUser(data.user),
-                session: this.mapSupabaseSession(data.session),
-              });
-            }
-          } else {
-            if (this.authWindow) {
-              this.authWindow.close();
-              this.authWindow = null;
-            }
-            resolve({
-              success: false,
-              error: {
-                code: 'NO_TOKENS',
-                message: 'No tokens received from OAuth provider',
-              },
-            });
-          }
-        }
-      });
-
-      // Handle window close
-      this.authWindow.on('closed', () => {
-        this.authWindow = null;
-        resolve({
-          success: false,
-          error: {
-            code: 'OAUTH_CANCELLED',
-            message: 'OAuth flow was cancelled',
-          },
-        });
-      });
-    });
+    return {
+      success: false,
+      error: {
+        code: 'NOT_IMPLEMENTED',
+        message: 'Google OAuth not yet implemented with backend',
+      },
+    };
   }
 
   /**
@@ -287,18 +137,16 @@ export class AuthService {
    */
   async signOut(): Promise<{ success: boolean; error?: string }> {
     try {
-      const { error } = await this.supabase.auth.signOut();
+      const session = this.getStoredSession();
       
-      if (error) {
-        return {
-          success: false,
-          error: error.message,
-        };
+      if (session) {
+        // Call backend signout endpoint
+        await api.post<SimpleResponse>('/api/v1/auth/signout');
       }
 
       this.clearSession();
       this.cancelTokenRefresh();
-      this.browserManager.destroy()
+      this.browserManager.destroy();
 
       return { success: true };
     } catch (error: any) {
@@ -314,13 +162,21 @@ export class AuthService {
    */
   async getCurrentSession(): Promise<AuthSession | null> {
     try {
-      const { data } = await this.supabase.auth.getSession();
+      const storedSession = this.getStoredSession();
       
-      if (data.session) {
-        return this.mapSupabaseSession(data.session);
+      if (!storedSession) {
+        return null;
       }
 
-      return null;
+      // Validate session with backend
+      const user = await this.getCurrentUser();
+      
+      if (!user) {
+        this.clearSession();
+        return null;
+      }
+
+      return storedSession;
     } catch (error) {
       console.error('Error getting current session:', error);
       return null;
@@ -332,13 +188,19 @@ export class AuthService {
    */
   async getCurrentUser(): Promise<User | null> {
     try {
-      const { data } = await this.supabase.auth.getUser();
+      const session = this.getStoredSession();
       
-      if (data.user) {
-        return this.mapSupabaseUser(data.user);
+      if (!session) {
+        return null;
       }
 
-      return null;
+      const response = await api.get<AuthResponse>('/api/v1/auth/user');
+
+      if (!response.success || !response.data || !response.data.user) {
+        return null;
+      }
+
+      return response.data.user;
     } catch (error) {
       console.error('Error getting current user:', error);
       return null;
@@ -350,24 +212,47 @@ export class AuthService {
    */
   async refreshSession(): Promise<AuthResponse> {
     try {
-      const { data, error } = await this.supabase.auth.refreshSession();
-
-      if (error || !data.session || !data.user) {
+      const storedSession = this.getStoredSession();
+      
+      if (!storedSession || !storedSession.refresh_token) {
         return {
           success: false,
           error: {
-            code: 'REFRESH_ERROR',
-            message: error?.message || 'Failed to refresh session',
+            code: 'NO_SESSION',
+            message: 'No session to refresh',
           },
         };
       }
 
-      return {
-        success: true,
-        user: this.mapSupabaseUser(data.user),
-        session: this.mapSupabaseSession(data.session),
-      };
+      const response = await api.post<AuthResponse>(
+        '/api/v1/auth/refresh',
+        {
+          refresh_token: storedSession.refresh_token,
+        }
+      );
+
+      if (!response.success || !response.data) {
+        this.clearSession();
+        return {
+          success: false,
+          error: {
+            code: 'REFRESH_FAILED',
+            message: response.error || 'Failed to refresh session',
+          },
+        };
+      }
+
+      const authResponse = response.data;
+
+      // Persist new session
+      if (authResponse.success && authResponse.session) {
+        this.persistSession(authResponse.session);
+        this.scheduleTokenRefresh(authResponse.session);
+      }
+
+      return authResponse;
     } catch (error: any) {
+      this.clearSession();
       return {
         success: false,
         error: {
@@ -381,29 +266,24 @@ export class AuthService {
   /**
    * Update user profile
    */
-  async updateProfile(updates: { displayName?: string; photoURL?: string }): Promise<AuthResponse> {
+  async updateProfile(updates: UpdateProfileRequest): Promise<AuthResponse> {
     try {
-      const { data, error } = await this.supabase.auth.updateUser({
-        data: {
-          display_name: updates.displayName,
-          photo_url: updates.photoURL,
-        },
-      });
+      const response = await api.put<AuthResponse>(
+        '/api/v1/auth/profile',
+        updates
+      );
 
-      if (error || !data.user) {
+      if (!response.success || !response.data) {
         return {
           success: false,
           error: {
-            code: 'UPDATE_ERROR',
-            message: error?.message || 'Failed to update profile',
+            code: 'UPDATE_FAILED',
+            message: response.error || 'Failed to update profile',
           },
         };
       }
 
-      return {
-        success: true,
-        user: this.mapSupabaseUser(data.user),
-      };
+      return response.data;
     } catch (error: any) {
       return {
         success: false,
@@ -420,38 +300,33 @@ export class AuthService {
    */
   async verifyEmailOTP(email: string, token: string): Promise<AuthResponse> {
     try {
-      const { data, error } = await this.supabase.auth.verifyOtp({
-        email,
-        token,
-        type: 'signup',
-      });
+      const response = await api.post<AuthResponse>(
+        '/api/v1/auth/verify-otp',
+        {
+          email,
+          token,
+        }
+      );
 
-      if (error) {
+      if (!response.success || !response.data) {
         return {
           success: false,
           error: {
-            code: error.status?.toString() || 'VERIFY_ERROR',
-            message: error.message,
+            code: 'VERIFY_FAILED',
+            message: response.error || 'Verification failed',
           },
         };
       }
 
-      if (!data.user || !data.session) {
-        return {
-          success: false,
-          error: {
-            code: 'NO_USER',
-            message: 'No user data returned after verification',
-          },
-        };
+      const authResponse = response.data;
+
+      // If verification successful, persist session
+      if (authResponse.success && authResponse.session) {
+        this.persistSession(authResponse.session);
+        this.scheduleTokenRefresh(authResponse.session);
       }
 
-      // Session will be automatically persisted by auth state listener
-      return {
-        success: true,
-        user: this.mapSupabaseUser(data.user),
-        session: this.mapSupabaseSession(data.session),
-      };
+      return authResponse;
     } catch (error: any) {
       return {
         success: false,
@@ -468,19 +343,22 @@ export class AuthService {
    */
   async resendVerificationOTP(email: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const { error } = await this.supabase.auth.resend({
-        type: 'signup',
-        email,
-      });
+      const response = await api.post<SimpleResponse>(
+        '/api/v1/auth/resend-otp',
+        { email }
+      );
 
-      if (error) {
+      if (!response.success || !response.data) {
         return {
           success: false,
-          error: error.message,
+          error: response.error || 'Failed to resend OTP',
         };
       }
 
-      return { success: true };
+      return {
+        success: response.data.success,
+        error: response.data.error || undefined,
+      };
     } catch (error: any) {
       return {
         success: false,
@@ -494,18 +372,22 @@ export class AuthService {
    */
   async sendPasswordResetOTP(email: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const { error } = await this.supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: undefined, // No redirect, use OTP flow
-      });
+      const response = await api.post<SimpleResponse>(
+        '/api/v1/auth/password-reset',
+        { email }
+      );
 
-      if (error) {
+      if (!response.success || !response.data) {
         return {
           success: false,
-          error: error.message,
+          error: response.error || 'Failed to send reset code',
         };
       }
 
-      return { success: true };
+      return {
+        success: response.data.success,
+        error: response.data.error || undefined,
+      };
     } catch (error: any) {
       return {
         success: false,
@@ -523,54 +405,34 @@ export class AuthService {
     newPassword: string
   ): Promise<AuthResponse> {
     try {
-      // First verify the OTP
-      const { data, error: verifyError } = await this.supabase.auth.verifyOtp({
-        email,
-        token,
-        type: 'recovery',
-      });
+      const response = await api.post<AuthResponse>(
+        '/api/v1/auth/password-reset/verify',
+        {
+          email,
+          token,
+          new_password: newPassword,
+        }
+      );
 
-      if (verifyError) {
+      if (!response.success || !response.data) {
         return {
           success: false,
           error: {
-            code: verifyError.status?.toString() || 'VERIFY_ERROR',
-            message: verifyError.message,
+            code: 'RESET_FAILED',
+            message: response.error || 'Password reset failed',
           },
         };
       }
 
-      if (!data.user || !data.session) {
-        return {
-          success: false,
-          error: {
-            code: 'NO_USER',
-            message: 'Invalid verification code',
-          },
-        };
+      const authResponse = response.data;
+
+      // If reset successful, persist new session
+      if (authResponse.success && authResponse.session) {
+        this.persistSession(authResponse.session);
+        this.scheduleTokenRefresh(authResponse.session);
       }
 
-      // Now update the password
-      const { error: updateError } = await this.supabase.auth.updateUser({
-        password: newPassword,
-      });
-
-      if (updateError) {
-        return {
-          success: false,
-          error: {
-            code: updateError.status?.toString() || 'UPDATE_ERROR',
-            message: updateError.message,
-          },
-        };
-      }
-
-      // Session will be automatically persisted by auth state listener
-      return {
-        success: true,
-        user: this.mapSupabaseUser(data.user),
-        session: this.mapSupabaseSession(data.session),
-      };
+      return authResponse;
     } catch (error: any) {
       return {
         success: false,
@@ -592,13 +454,21 @@ export class AuthService {
   /**
    * Persist session to secure storage
    */
-  private persistSession(session: Session): void {
-    this.sessionStore.set('session', {
-      access_token: session.access_token,
-      refresh_token: session.refresh_token,
-      expires_at: session.expires_at,
-      user: session.user,
-    });
+  private persistSession(session: AuthSession): void {
+    this.sessionStore.set('session', session);
+  }
+
+  /**
+   * Get stored session
+   */
+  private getStoredSession(): AuthSession | null {
+    try {
+      const session = this.sessionStore.get('session') as AuthSession | undefined;
+      return session || null;
+    } catch (error) {
+      console.error('Error getting stored session:', error);
+      return null;
+    }
   }
 
   /**
@@ -606,20 +476,18 @@ export class AuthService {
    */
   private async restoreSession(): Promise<void> {
     try {
-      const storedSession = this.sessionStore.get('session') as any;
+      const storedSession = this.getStoredSession();
       
-      if (storedSession && storedSession.access_token && storedSession.refresh_token) {
-        const { data, error } = await this.supabase.auth.setSession({
-          access_token: storedSession.access_token,
-          refresh_token: storedSession.refresh_token,
-        });
-
-        if (error) {
-          console.error('Failed to restore session:', error);
-          this.clearSession();
-        } else if (data.session) {
+      if (storedSession && storedSession.access_token) {
+        // Validate session with backend
+        const user = await this.getCurrentUser();
+        
+        if (user) {
           console.log('Session restored successfully');
-          this.scheduleTokenRefresh(data.session);
+          this.scheduleTokenRefresh(storedSession);
+        } else {
+          console.log('Stored session is invalid');
+          this.clearSession();
         }
       }
     } catch (error) {
@@ -638,7 +506,7 @@ export class AuthService {
   /**
    * Schedule automatic token refresh
    */
-  private scheduleTokenRefresh(session: Session): void {
+  private scheduleTokenRefresh(session: AuthSession): void {
     this.cancelTokenRefresh();
 
     if (session.expires_at) {
@@ -661,34 +529,6 @@ export class AuthService {
       clearTimeout(this.refreshTimer);
       this.refreshTimer = null;
     }
-  }
-
-  /**
-   * Map Supabase user to our User type
-   */
-  private mapSupabaseUser(supabaseUser: SupabaseUser): User {
-    return {
-      id: supabaseUser.id,
-      email: supabaseUser.email || '',
-      emailVerified: !!supabaseUser.email_confirmed_at,
-      displayName: supabaseUser.user_metadata?.display_name || supabaseUser.email?.split('@')[0],
-      photoURL: supabaseUser.user_metadata?.photo_url || supabaseUser.user_metadata?.avatar_url,
-      createdAt: supabaseUser.created_at,
-      lastSignInAt: supabaseUser.last_sign_in_at || supabaseUser.created_at,
-      metadata: supabaseUser.user_metadata,
-    };
-  }
-
-  /**
-   * Map Supabase session to our AuthSession type
-   */
-  private mapSupabaseSession(session: Session): AuthSession {
-    return {
-      user: this.mapSupabaseUser(session.user),
-      accessToken: session.access_token,
-      refreshToken: session.refresh_token,
-      expiresAt: session.expires_at || 0,
-    };
   }
 
   /**

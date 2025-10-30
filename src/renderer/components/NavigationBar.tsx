@@ -170,14 +170,14 @@ export function NavigationBar({
         <DropdownMenuContent align="end" className="w-56">
           <DropdownMenuItem onClick={() => onNavigate('browzer://profile')}>
              <Avatar className="size-7">
-              <AvatarImage src={user?.photoURL || undefined} />
+              <AvatarImage src={user?.photo_url || undefined} />
               <AvatarFallback className="bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400 text-sm">
-                {user?.displayName 
-                  ? user.displayName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+                {user?.display_name 
+                  ? user.display_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
                   : user?.email?.slice(0, 2).toUpperCase() || 'U'}
               </AvatarFallback>
             </Avatar>
-            {user?.displayName || 'Profile'}
+            {user?.display_name || 'Profile'}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => onNavigate('browzer://settings')}>

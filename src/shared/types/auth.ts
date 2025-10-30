@@ -1,27 +1,30 @@
 /**
  * Authentication related types
+ * 
+ * IMPORTANT: All types use snake_case to match backend (FastAPI/Supabase)
+ * This ensures consistent property names across the entire stack
  */
 
 export interface User {
   id: string;
   email: string;
-  emailVerified: boolean;
-  displayName?: string;
-  photoURL?: string;
-  createdAt: string;
-  lastSignInAt: string;
-  metadata?: Record<string, any>;
+  email_verified: boolean;
+  display_name: string | null;
+  photo_url: string | null;
+  created_at: string;  // ISO 8601 format
+  last_sign_in_at: string;  // ISO 8601 format
+  metadata: Record<string, any> | null;
 }
 
 export interface AuthSession {
   user: User;
-  accessToken: string;
-  refreshToken: string;
-  expiresAt: number;
+  access_token: string;
+  refresh_token: string;
+  expires_at: number;  // Unix timestamp
 }
 
 export interface AuthState {
-  isAuthenticated: boolean;
+  is_authenticated: boolean;
   user: User | null;
   session: AuthSession | null;
   loading: boolean;
@@ -31,7 +34,7 @@ export interface AuthState {
 export interface SignUpCredentials {
   email: string;
   password: string;
-  displayName?: string;
+  display_name?: string | null;
 }
 
 export interface SignInCredentials {
@@ -46,7 +49,37 @@ export interface AuthError {
 
 export interface AuthResponse {
   success: boolean;
-  user?: User;
-  session?: AuthSession;
-  error?: AuthError;
+  user?: User | null;
+  session?: AuthSession | null;
+  error?: AuthError | null;
+}
+
+export interface UpdateProfileRequest {
+  display_name?: string | null;
+  photo_url?: string | null;
+}
+
+export interface VerifyOTPRequest {
+  email: string;
+  token: string;
+}
+
+export interface ResendOTPRequest {
+  email: string;
+}
+
+export interface PasswordResetRequest {
+  email: string;
+}
+
+export interface VerifyPasswordResetRequest {
+  email: string;
+  token: string;
+  new_password: string;
+}
+
+export interface SimpleResponse {
+  success: boolean;
+  message?: string | null;
+  error?: string | null;
 }

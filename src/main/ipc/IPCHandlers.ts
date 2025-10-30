@@ -6,7 +6,8 @@ import { WindowManager } from '@/main/window/WindowManager';
 import { SettingsStore } from '@/main/settings/SettingsStore';
 import { PasswordManager } from '@/main/password/PasswordManager';
 import { AuthService } from '@/main/auth';
-import { RecordedAction, HistoryQuery, AppSettings, SignUpCredentials, SignInCredentials } from '@/shared/types';
+import { RecordedAction, HistoryQuery, AppSettings, SignUpCredentials, SignInCredentials, UpdateProfileRequest } from '@/shared/types';
+import { ConnectionManager } from '../api';
 
 /**
  * IPCHandlers - Centralized IPC communication setup
@@ -20,11 +21,12 @@ export class IPCHandlers {
   constructor(
     private browserManager: BrowserManager,
     private layoutManager: LayoutManager,
-    private windowManager: WindowManager
+    private windowManager: WindowManager,
+    private connectionManager: ConnectionManager
   ) {
     this.settingsStore = new SettingsStore();
     this.passwordManager = this.browserManager.getPasswordManager();
-    this.authService = new AuthService(this.browserManager);
+    this.authService = new AuthService(this.browserManager, this.connectionManager);
     this.setupHandlers();
   }
 
@@ -388,7 +390,7 @@ export class IPCHandlers {
     });
 
     // Update profile
-    ipcMain.handle('auth:update-profile', async (_, updates: { displayName?: string; photoURL?: string }) => {
+    ipcMain.handle('auth:update-profile', async (_, updates: UpdateProfileRequest) => {
       return this.authService.updateProfile(updates);
     });
 

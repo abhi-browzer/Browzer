@@ -18,7 +18,7 @@ import { toast } from 'sonner';
 export function SignUpPage() {
   const navigate = useNavigate();
   const { signUp, signInWithGoogle, loading } = useAuth();
-  const [displayName, setDisplayName] = useState('');
+  const [display_name, setdisplay_name] = useState('');
   const [email, setEmail] = useState(''); 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -51,7 +51,7 @@ export function SignUpPage() {
     const result = await signUp({ 
       email, 
       password,
-      displayName: displayName || undefined
+      display_name: display_name || undefined
     });
 
     if (result.success) {
@@ -78,15 +78,15 @@ export function SignUpPage() {
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="displayName">Display Name (Optional)</Label>
+          <Label htmlFor="display_name">Display Name (Optional)</Label>
           <div className="relative">
             <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <Input
-              id="displayName"
+              id="display_name"
               type="text"
               placeholder="John Doe"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
+              value={display_name}
+              onChange={(e) => setdisplay_name(e.target.value)}
               disabled={loading}
               className="pl-10"
             />

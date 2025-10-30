@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { contextBridge, ipcRenderer, desktopCapturer } from 'electron';
-import { HistoryEntry, HistoryQuery, HistoryStats, TabInfo, AppSettings, SignUpCredentials, SignInCredentials, AuthResponse, AuthSession, User } from '@/shared/types';
+import { HistoryEntry, HistoryQuery, HistoryStats, TabInfo, AppSettings, SignUpCredentials, SignInCredentials, AuthResponse, AuthSession, User, UpdateProfileRequest } from '@/shared/types';
 
 
 export interface BrowserAPI {
@@ -130,7 +130,7 @@ export interface AuthAPI {
   refreshSession: () => Promise<AuthResponse>;
   
   // Profile Management
-  updateProfile: (updates: { displayName?: string; photoURL?: string }) => Promise<AuthResponse>;
+  updateProfile: (updates: UpdateProfileRequest) => Promise<AuthResponse>;
   
   // OTP Verification
   verifyOTP: (email: string, token: string) => Promise<AuthResponse>;
@@ -336,7 +336,7 @@ const authAPI: AuthAPI = {
   getCurrentSession: () => ipcRenderer.invoke('auth:get-session'),
   getCurrentUser: () => ipcRenderer.invoke('auth:get-user'),
   refreshSession: () => ipcRenderer.invoke('auth:refresh-session'),
-  updateProfile: (updates: { displayName?: string; photoURL?: string }) => 
+  updateProfile: (updates: UpdateProfileRequest) => 
     ipcRenderer.invoke('auth:update-profile', updates),
   verifyOTP: (email: string, token: string) => ipcRenderer.invoke('auth:verify-otp', email, token),
   resendOTP: (email: string) => ipcRenderer.invoke('auth:resend-otp', email),

@@ -29,25 +29,25 @@ import { toast } from 'sonner';
 export default function Profile() {
   const { user, signOut, updateProfile, loading } = useAuth();
   
-  const [displayName, setDisplayName] = useState('');
+  const [display_name, setdisplay_name] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (user) {
-      setDisplayName(user.displayName || '');
+      setdisplay_name(user.display_name || '');
     }
   }, [user]);
 
   const handleSave = async () => {
-    if (!displayName.trim()) {
+    if (!display_name.trim()) {
       toast.error('Display name cannot be empty');
       return;
     }
 
     setIsSaving(true);
     try {
-      const result = await updateProfile({ displayName: displayName.trim() });
+      const result = await updateProfile({ display_name: display_name.trim() });
       
       if (result.success) {
         toast.success('Profile updated successfully');
@@ -121,14 +121,14 @@ export default function Profile() {
             {/* Avatar Section */}
             <div className="flex items-center gap-6">
               <Avatar className="h-24 w-24">
-                <AvatarImage src={user.photoURL || undefined} />
+                <AvatarImage src={user.photo_url || undefined} />
                 <AvatarFallback className="text-2xl bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400">
-                  {getInitials(user.displayName || user.email)}
+                  {getInitials(user.display_name || user.email)}
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1">
                 <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
-                  {user.displayName || 'No name set'}
+                  {user.display_name || 'No name set'}
                 </h3>
                 <p className="text-sm text-slate-600 dark:text-slate-400">
                   {user.email}
@@ -143,14 +143,14 @@ export default function Profile() {
 
             {/* Display Name */}
             <div className="space-y-2">
-              <Label htmlFor="displayName">Display Name</Label>
+              <Label htmlFor="display_name">Display Name</Label>
               <div className="flex gap-2">
                 <div className="relative flex-1">
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                   <Input
-                    id="displayName"
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
+                    id="display_name"
+                    value={display_name}
+                    onChange={(e) => setdisplay_name(e.target.value)}
                     disabled={!isEditing || isSaving}
                     className="pl-10"
                     placeholder="Enter your name"
@@ -164,7 +164,7 @@ export default function Profile() {
                   <>
                     <Button
                       onClick={handleSave}
-                      disabled={isSaving || !displayName.trim()}
+                      disabled={isSaving || !display_name.trim()}
                     >
                       {isSaving ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -176,7 +176,7 @@ export default function Profile() {
                       variant="outline"
                       onClick={() => {
                         setIsEditing(false);
-                        setDisplayName(user.displayName || '');
+                        setdisplay_name(user.display_name || '');
                       }}
                       disabled={isSaving}
                     >
@@ -223,7 +223,7 @@ export default function Profile() {
                     Member Since
                   </p>
                   <p className="text-sm text-slate-600 dark:text-slate-400">
-                    {formatDate(user.createdAt)}
+                    {formatDate(user.created_at)}
                   </p>
                 </div>
               </div>
@@ -237,11 +237,11 @@ export default function Profile() {
                     Email Verified
                   </p>
                   <p className="text-sm text-slate-600 dark:text-slate-400">
-                    {user.emailVerified ? 'Yes' : 'No'}
+                    {user.email_verified ? 'Yes' : 'No'}
                   </p>
                 </div>
               </div>
-              {user.emailVerified && (
+              {user.email_verified && (
                 <CheckCircle2Icon className="h-5 w-5 text-green-600" />
               )}
             </div>
