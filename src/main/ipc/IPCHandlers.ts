@@ -393,29 +393,24 @@ export class IPCHandlers {
       return this.authService.updateProfile(updates);
     });
 
-    // Verify email with OTP
-    ipcMain.handle('auth:verify-otp', async (_, email: string, token: string) => {
-      return this.authService.verifyEmailOTP(email, token);
+    // Verify magic link token
+    ipcMain.handle('auth:verify-token', async (_, tokenHash: string, type: string) => {
+      return this.authService.verifyToken(tokenHash, type);
     });
 
-    // Resend verification OTP
-    ipcMain.handle('auth:resend-otp', async (_, email: string) => {
-      return this.authService.resendVerificationOTP(email);
+    // Resend confirmation email
+    ipcMain.handle('auth:resend-confirmation', async (_, email: string) => {
+      return this.authService.resendConfirmation(email);
     });
 
-    // Send password reset OTP
-    ipcMain.handle('auth:send-password-reset-otp', async (_, email: string) => {
-      return this.authService.sendPasswordResetOTP(email);
+    // Send password reset magic link
+    ipcMain.handle('auth:send-password-reset', async (_, email: string) => {
+      return this.authService.sendPasswordReset(email);
     });
 
-    // Verify password reset OTP and update password
-    ipcMain.handle('auth:verify-password-reset-otp', async (_, email: string, token: string, newPassword: string) => {
-      return this.authService.verifyPasswordResetOTP(email, token, newPassword);
-    });
-
-    // Resend password reset OTP
-    ipcMain.handle('auth:resend-password-reset-otp', async (_, email: string) => {
-      return this.authService.resendPasswordResetOTP(email);
+    // Update password after magic link verification
+    ipcMain.handle('auth:update-password', async (_, newPassword: string, accessToken: string) => {
+      return this.authService.updatePassword(newPassword, accessToken);
     });
   }
 

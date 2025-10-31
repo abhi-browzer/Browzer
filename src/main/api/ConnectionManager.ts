@@ -44,7 +44,7 @@ export class ConnectionManager extends EventEmitter {
     };
 
     this.apiClient = new ApiClient(apiConfig);
-    this.healthCheckInterval = config.healthCheckInterval || 60000; // 1 minute
+    this.healthCheckInterval = config.healthCheckInterval ?? 300000; // 5 minutes
     
     // Initialize global api instance
     initializeApi(this.apiClient);

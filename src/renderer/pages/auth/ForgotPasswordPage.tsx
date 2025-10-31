@@ -32,17 +32,19 @@ export function ForgotPasswordPage() {
     setLoading(true);
 
     try {
-      const result = await window.authAPI.sendPasswordResetOTP(email);
+      const result = await window.authAPI.sendPasswordReset(email);
       
       if (result.success) {
-        toast.success('Verification code sent! Check your email.');
-        // Redirect to reset password page with email
-        navigate(`/auth/reset-password?email=${encodeURIComponent(email)}`);
+        toast.success('Password reset link sent! Check your email.');
+        // Show success message and redirect to sign in
+        setTimeout(() => {
+          navigate('/auth/signin');
+        }, 2000);
       } else {
-        setError(result.error || 'Failed to send reset code');
+        setError(result.error || 'Failed to send reset link');
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to send reset code');
+      setError(err.message || 'Failed to send reset link');
     } finally {
       setLoading(false);
     }
@@ -54,7 +56,7 @@ export function ForgotPasswordPage() {
           <CardHeader>
             <CardTitle>Reset Password</CardTitle>
             <CardDescription>
-              Enter your email address and we'll send you a verification code
+              Enter your email address and we'll send you a password reset link
             </CardDescription>
           </CardHeader>
           

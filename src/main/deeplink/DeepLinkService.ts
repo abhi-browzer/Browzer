@@ -17,6 +17,7 @@ import { getRouteFromURL } from '@/shared/routes';
 export interface DeepLinkData {
   url: string;
   showInTab: boolean;
+  params?: Record<string, string>; // Query params or hash fragments
 }
 
 export class DeepLinkService {
@@ -89,7 +90,7 @@ export class DeepLinkService {
   }
 
   /**
-   * Parse deep link URL
+   * Parse deep link URL and extract parameters
    */
   private parseDeepLink(url: string): DeepLinkData | null {
     try {
@@ -103,14 +104,67 @@ export class DeepLinkService {
         return null;
       }
 
+      // Extract parameters from both query string (?) and hash fragment (#)
+      const params = this.extractParams(url);
+
+      // Build clean URL with route path and params as query string
+      const cleanUrl = this.buildCleanUrl(route.path, params);
+
       return {
-        url,
+        url: cleanUrl,
         showInTab: route.showInTab,
+        params,
       };
     } catch (error) {
       console.error('[DeepLinkService] Parse error:', error);
       return null;
     }
+  }
+
+  /**
+   * Extract parameters from URL (both query params and hash fragments)
+   * Supabase sends tokens as hash fragments: browzer://auth/confirm-signup#access_token=xxx&type=signup
+   */
+  private extractParams(url: string): Record<string, string> {
+    const params: Record<string, string> = {};
+
+    // Extract query parameters (?key=value)
+    const queryMatch = url.match(/\?([^#]+)/);
+    if (queryMatch) {
+      const queryString = queryMatch[1];
+      const urlParams = new URLSearchParams(queryString);
+      urlParams.forEach((value, key) => {
+        params[key] = value;
+      });
+    }
+
+    // Extract hash fragment parameters (#key=value&key2=value2)
+    const hashMatch = url.match(/#(.+)$/);
+    if (hashMatch) {
+      const hashString = hashMatch[1];
+      const hashParams = new URLSearchParams(hashString);
+      hashParams.forEach((value, key) => {
+        params[key] = value;
+      });
+    }
+
+    return params;
+  }
+
+  /**
+   * Build clean URL with route path and params as query string
+   */
+  private buildCleanUrl(routePath: string, params: Record<string, string>): string {
+    const paramEntries = Object.entries(params);
+    if (paramEntries.length === 0) {
+      return routePath;
+    }
+
+    const queryString = paramEntries
+      .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+      .join('&');
+
+    return `${routePath}?${queryString}`;
   }
 
   /**

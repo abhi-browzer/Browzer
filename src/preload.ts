@@ -132,14 +132,13 @@ export interface AuthAPI {
   // Profile Management
   updateProfile: (updates: UpdateProfileRequest) => Promise<AuthResponse>;
   
-  // OTP Verification
-  verifyOTP: (email: string, token: string) => Promise<AuthResponse>;
-  resendOTP: (email: string) => Promise<{ success: boolean; error?: string }>;
+  // Magic Link Verification
+  verifyToken: (tokenHash: string, type: string) => Promise<AuthResponse>;
+  resendConfirmation: (email: string) => Promise<{ success: boolean; error?: string }>;
   
   // Password Reset
-  sendPasswordResetOTP: (email: string) => Promise<{ success: boolean; error?: string }>;
-  verifyPasswordResetOTP: (email: string, token: string, newPassword: string) => Promise<AuthResponse>;
-  resendPasswordResetOTP: (email: string) => Promise<{ success: boolean; error?: string }>;
+  sendPasswordReset: (email: string) => Promise<{ success: boolean; error?: string }>;
+  updatePassword: (newPassword: string, accessToken: string) => Promise<AuthResponse>;
 }
 
 // Expose protected methods that allow the renderer process to use
@@ -338,12 +337,12 @@ const authAPI: AuthAPI = {
   refreshSession: () => ipcRenderer.invoke('auth:refresh-session'),
   updateProfile: (updates: UpdateProfileRequest) => 
     ipcRenderer.invoke('auth:update-profile', updates),
-  verifyOTP: (email: string, token: string) => ipcRenderer.invoke('auth:verify-otp', email, token),
-  resendOTP: (email: string) => ipcRenderer.invoke('auth:resend-otp', email),
-  sendPasswordResetOTP: (email: string) => ipcRenderer.invoke('auth:send-password-reset-otp', email),
-  verifyPasswordResetOTP: (email: string, token: string, newPassword: string) => 
-    ipcRenderer.invoke('auth:verify-password-reset-otp', email, token, newPassword),
-  resendPasswordResetOTP: (email: string) => ipcRenderer.invoke('auth:resend-password-reset-otp', email),
+  verifyToken: (tokenHash: string, type: string) => 
+    ipcRenderer.invoke('auth:verify-token', tokenHash, type),
+  resendConfirmation: (email: string) => ipcRenderer.invoke('auth:resend-confirmation', email),
+  sendPasswordReset: (email: string) => ipcRenderer.invoke('auth:send-password-reset', email),
+  updatePassword: (newPassword: string, accessToken: string) => 
+    ipcRenderer.invoke('auth:update-password', newPassword, accessToken),
 };
 
 contextBridge.exposeInMainWorld('browserAPI', browserAPI);

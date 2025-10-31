@@ -1,7 +1,8 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { ProtectedRoute } from '@/renderer/components/auth/ProtectedRoute';
-import { SignInPage, SignUpPage, ForgotPasswordPage, VerifyOTPPage } from '@/renderer/pages/auth';
-import { ResetPasswordPage } from '@/renderer/pages/auth/ResetPasswordPage';
+import { SignInPage, SignUpPage, ForgotPasswordPage } from '@/renderer/pages/auth';
+import { ConfirmSignupPage } from '@/renderer/pages/auth/ConfirmSignupPage';
+import { ResetPasswordCallbackPage } from '@/renderer/pages/auth/ResetPasswordCallbackPage';
 import { BrowserChrome } from '@/renderer/components/BrowserChrome';
 import { InternalRouter, useIsInternalPage } from './InternalRouter';
 import { useDeepLink } from '@/renderer/hooks/useDeepLink';
@@ -23,8 +24,10 @@ function AppRoutes() {
       <Route path="/auth/signin" element={<SignInPage />} />
       <Route path="/auth/signup" element={<SignUpPage />} />
       <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
-      <Route path="/auth/verify-otp" element={<VerifyOTPPage />} />
-      <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
+      
+      {/* Magic Link Callback Routes */}
+      <Route path="/auth/confirm-signup" element={<ConfirmSignupPage />} />
+      <Route path="/auth/reset-password" element={<ResetPasswordCallbackPage />} />
       
       {/* Protected Main App Route */}
       <Route 

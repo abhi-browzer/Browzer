@@ -59,12 +59,12 @@ export interface UpdateProfileRequest {
   photo_url?: string | null;
 }
 
-export interface VerifyOTPRequest {
-  email: string;
-  token: string;
+export interface VerifyTokenHashRequest {
+  token_hash: string;
+  type: string;  // 'signup' or 'recovery'
 }
 
-export interface ResendOTPRequest {
+export interface ResendConfirmationRequest {
   email: string;
 }
 
@@ -72,9 +72,7 @@ export interface PasswordResetRequest {
   email: string;
 }
 
-export interface VerifyPasswordResetRequest {
-  email: string;
-  token: string;
+export interface UpdatePasswordRequest {
   new_password: string;
 }
 

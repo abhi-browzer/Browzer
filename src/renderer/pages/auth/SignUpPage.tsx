@@ -53,9 +53,11 @@ export function SignUpPage() {
     });
 
     if (result.success) {
-      toast.success('Verification code sent! Check your email.');
-      // Redirect to OTP verification page with email
-      navigate(`/auth/verify-otp?email=${encodeURIComponent(email)}`);
+      toast.success('Verification link sent! Check your email to confirm your account.');
+      // Show success message and redirect to sign in
+      setTimeout(() => {
+        navigate('/auth/signin');
+      }, 2000);
     }
   };
 

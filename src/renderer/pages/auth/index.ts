@@ -4,4 +4,5 @@
 export { SignInPage } from './SignInPage';
 export { SignUpPage } from './SignUpPage';
 export { ForgotPasswordPage } from './ForgotPasswordPage';
-export { VerifyOTPPage } from './VerifyOTPPage';
+export { ConfirmSignupPage } from './ConfirmSignupPage';
+export { ResetPasswordCallbackPage } from './ResetPasswordCallbackPage';

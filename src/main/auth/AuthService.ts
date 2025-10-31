@@ -292,15 +292,16 @@ export class AuthService {
   }
 
   /**
-   * Verify email with OTP code
+   * Verify magic link token hash
+   * Used for email confirmation and password reset
    */
-  async verifyEmailOTP(email: string, token: string): Promise<AuthResponse> {
+  async verifyToken(tokenHash: string, type: string): Promise<AuthResponse> {
     try {
       const response = await api.post<AuthResponse>(
-        '/auth/verify-otp',
+        '/auth/verify-token',
         {
-          email,
-          token,
+          token_hash: tokenHash,
+          type,
         }
       );
 
@@ -335,19 +336,19 @@ export class AuthService {
   }
 
   /**
-   * Resend verification OTP
+   * Resend email confirmation magic link
    */
-  async resendVerificationOTP(email: string): Promise<{ success: boolean; error?: string }> {
+  async resendConfirmation(email: string): Promise<{ success: boolean; error?: string }> {
     try {
       const response = await api.post<SimpleResponse>(
-        '/auth/resend-otp',
+        '/auth/resend-confirmation',
         { email }
       );
 
       if (!response.success || !response.data) {
         return {
           success: false,
-          error: response.error || 'Failed to resend OTP',
+          error: response.error || 'Failed to resend confirmation email',
         };
       }
 
@@ -358,15 +359,15 @@ export class AuthService {
     } catch (error: any) {
       return {
         success: false,
-        error: error.message || 'An unexpected error occurred while resending OTP',
+        error: error.message || 'An unexpected error occurred while resending confirmation',
       };
     }
   }
 
   /**
-   * Send password reset OTP to email
+   * Send password reset magic link to email
    */
-  async sendPasswordResetOTP(email: string): Promise<{ success: boolean; error?: string }> {
+  async sendPasswordReset(email: string): Promise<{ success: boolean; error?: string }> {
     try {
       const response = await api.post<SimpleResponse>(
         '/auth/password-reset',
@@ -376,7 +377,7 @@ export class AuthService {
       if (!response.success || !response.data) {
         return {
           success: false,
-          error: response.error || 'Failed to send reset code',
+          error: response.error || 'Failed to send reset link',
         };
       }
 
@@ -387,26 +388,29 @@ export class AuthService {
     } catch (error: any) {
       return {
         success: false,
-        error: error.message || 'An unexpected error occurred while sending reset code',
+        error: error.message || 'An unexpected error occurred while sending reset link',
       };
     }
   }
 
   /**
-   * Verify password reset OTP and update password
+   * Update password after magic link verification
+   * The access token comes from the magic link verification
    */
-  async verifyPasswordResetOTP(
-    email: string,
-    token: string,
-    newPassword: string
+  async updatePassword(
+    newPassword: string,
+    accessToken: string
   ): Promise<AuthResponse> {
     try {
       const response = await api.post<AuthResponse>(
-        '/auth/password-reset/verify',
+        '/auth/password-update',
         {
-          email,
-          token,
           new_password: newPassword,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
         }
       );
 
@@ -414,37 +418,27 @@ export class AuthService {
         return {
           success: false,
           error: {
-            code: 'RESET_FAILED',
-            message: response.error || 'Password reset failed',
+            code: 'UPDATE_FAILED',
+            message: response.error || 'Password update failed',
           },
         };
       }
 
       const authResponse = response.data;
 
-      // If reset successful, persist new session
-      if (authResponse.success && authResponse.session) {
-        this.persistSession(authResponse.session);
-        this.scheduleTokenRefresh(authResponse.session);
-      }
+      // Note: User needs to sign in again after password reset
+      // Don't persist session here
 
       return authResponse;
     } catch (error: any) {
       return {
         success: false,
         error: {
-          code: 'RESET_EXCEPTION',
-          message: error.message || 'An unexpected error occurred during password reset',
+          code: 'UPDATE_EXCEPTION',
+          message: error.message || 'An unexpected error occurred during password update',
         },
       };
     }
-  }
-
-  /**
-   * Resend password reset OTP
-   */
-  async resendPasswordResetOTP(email: string): Promise<{ success: boolean; error?: string }> {
-    return this.sendPasswordResetOTP(email);
   }
 
   /**

@@ -70,10 +70,12 @@ export const ALL_ROUTES = {
 /**
  * Get route config from browzer:// URL
  * Example: browzer://settings -> { path: '/settings', title: 'Settings', showInTab: true }
+ * Handles both query params (?) and hash fragments (#)
  */
 export function getRouteFromURL(url: string): RouteConfig | null {
   // Extract route from browzer://route or browzer://auth/route
-  const match = url.match(/^browzer:\/\/(.+?)(?:\?|$)/);
+  // Match until query params (?) or hash fragment (#) or end of string
+  const match = url.match(/^browzer:\/\/(.+?)(?:[?#]|$)/);
   if (!match) return null;
 
   const routePath = match[1];
