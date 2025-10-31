@@ -87,6 +87,7 @@
     "date-fns": "^4.1.0",
     "electron-squirrel-startup": "^1.0.1",
     "electron-store": "^11.0.2",
+    "eventsource": "^4.0.0",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.545.0",
     "react": "^19.2.0",

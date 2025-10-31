@@ -126,7 +126,7 @@ export class ApiClient {
   async connect(): Promise<ApiResponse<{
     session_token: string;
     server_version: string;
-    websocket_url: string;
+    sse_url: string;
   }>> {
     try {
       const response = await this.axios.post('/api/v1/connection/establish', {

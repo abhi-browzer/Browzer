@@ -1,5 +1,5 @@
 /**
- * Connection Manager - Orchestrates API and WebSocket connections
+ * Connection Manager - Orchestrates API and SSE connections
  * 
  * Responsibilities:
  * - Initialize and maintain connection to backend
@@ -9,7 +9,7 @@
  */
 
 import { ApiClient, ApiConfig } from './ApiClient';
-import { WebSocketClient, WebSocketConfig } from './WebSocketClient';
+import { SSEClient, SSEConfig, SSEConnectionState } from './SSEClient';
 import { initializeApi } from './api';
 import { EventEmitter } from 'events';
 
@@ -28,7 +28,7 @@ export enum ConnectionStatus {
 
 export class ConnectionManager extends EventEmitter {
   private apiClient: ApiClient;
-  private wsClient: WebSocketClient | null = null;
+  private sseClient: SSEClient | null = null;
   private status: ConnectionStatus = ConnectionStatus.DISCONNECTED;
   private healthCheckInterval: number;
   private healthCheckTimer: NodeJS.Timeout | null = null;
@@ -71,13 +71,13 @@ export class ConnectionManager extends EventEmitter {
         throw new Error(response.error || 'Failed to establish connection');
       }
 
-      const { session_token, websocket_url, server_version } = response.data;
+      const { session_token, sse_url, server_version } = response.data;
       console.log(`[ConnectionManager] Connected to server v${server_version}`);
 
-      // Step 2: Initialize WebSocket connection
-      if (websocket_url) {
-        console.log('[ConnectionManager] Initializing WebSocket...');
-        await this.initializeWebSocket(websocket_url, session_token);
+      // Step 2: Initialize SSE connection
+      if (sse_url) {
+        console.log('[ConnectionManager] Initializing SSE...');
+        await this.initializeSSE(sse_url, session_token);
       }
 
       this.status = ConnectionStatus.CONNECTED;
@@ -99,37 +99,65 @@ export class ConnectionManager extends EventEmitter {
   }
 
   /**
-   * Initialize WebSocket connection
+   * Initialize SSE connection
    */
-  private async initializeWebSocket(url: string, token: string): Promise<void> {
-    const wsConfig: WebSocketConfig = {
+  private async initializeSSE(url: string, token: string): Promise<void> {
+    const sseConfig: SSEConfig = {
       url,
       token,
       electronId: this.apiClient.getElectronId(),
+      apiKey: this.apiClient['apiKey'], // Access private field
       reconnectInterval: 5000,
-      heartbeatInterval: 30000,
+      maxReconnectAttempts: 10,
+      heartbeatTimeout: 60000,
     };
 
-    this.wsClient = new WebSocketClient(wsConfig);
+    this.sseClient = new SSEClient(sseConfig);
 
-    // Forward WebSocket events
-    this.wsClient.on('connected', () => {
-      console.log('[ConnectionManager] WebSocket connected');
-      this.emit('websocket:connected');
+    // Forward SSE events
+    this.sseClient.on('connected', () => {
+      console.log('[ConnectionManager] SSE connected');
+      this.emit('sse:connected');
     });
 
-    this.wsClient.on('disconnected', () => {
-      console.log('[ConnectionManager] WebSocket disconnected');
-      this.emit('websocket:disconnected');
+    this.sseClient.on('disconnected', () => {
+      console.log('[ConnectionManager] SSE disconnected');
+      this.emit('sse:disconnected');
     });
 
-    this.wsClient.on('error', (error) => {
-      console.error('[ConnectionManager] WebSocket error:', error);
-      this.emit('websocket:error', error);
+    this.sseClient.on('error', (error: any) => {
+      console.error('[ConnectionManager] SSE error:', error);
+      this.emit('sse:error', error);
+    });
+
+    this.sseClient.on('state_change', (state: SSEConnectionState) => {
+      console.log('[ConnectionManager] SSE state changed:', state);
+      this.emit('sse:state_change', state);
+    });
+
+    // Forward all SSE message events
+    this.sseClient.on('message', (message: any) => {
+      this.emit('sse:message', message);
+    });
+
+    this.sseClient.on('automation_progress', (data: any) => {
+      this.emit('automation_progress', data);
+    });
+
+    this.sseClient.on('notification', (data: any) => {
+      this.emit('notification', data);
+    });
+
+    this.sseClient.on('command', (data: any) => {
+      this.emit('command', data);
+    });
+
+    this.sseClient.on('sync', (data: any) => {
+      this.emit('sync', data);
     });
 
     // Connect
-    await this.wsClient.connect();
+    await this.sseClient.connect();
   }
 
   /**
@@ -141,10 +169,10 @@ export class ConnectionManager extends EventEmitter {
     // Stop health check
     this.stopHealthCheck();
 
-    // Disconnect WebSocket
-    if (this.wsClient) {
-      this.wsClient.disconnect();
-      this.wsClient = null;
+    // Disconnect SSE
+    if (this.sseClient) {
+      this.sseClient.disconnect();
+      this.sseClient = null;
     }
 
     // Disconnect API
@@ -194,10 +222,10 @@ export class ConnectionManager extends EventEmitter {
   }
 
   /**
-   * Get WebSocket client
+   * Get SSE client
    */
-  getWebSocketClient(): WebSocketClient | null {
-    return this.wsClient;
+  getSSEClient(): SSEClient | null {
+    return this.sseClient;
   }
 
   /**
@@ -215,29 +243,16 @@ export class ConnectionManager extends EventEmitter {
   }
 
   /**
-   * Subscribe to WebSocket channel
+   * Check if SSE is connected
    */
-  subscribe(channel: string): void {
-    if (this.wsClient) {
-      this.wsClient.subscribe(channel);
-    }
+  isSSEConnected(): boolean {
+    return this.sseClient?.isConnected() || false;
   }
 
   /**
-   * Unsubscribe from WebSocket channel
+   * Get SSE connection state
    */
-  unsubscribe(channel: string): void {
-    if (this.wsClient) {
-      this.wsClient.unsubscribe(channel);
-    }
-  }
-
-  /**
-   * Send message via WebSocket
-   */
-  sendMessage(message: any): void {
-    if (this.wsClient) {
-      this.wsClient.send(message);
-    }
+  getSSEState(): SSEConnectionState | null {
+    return this.sseClient?.getState() || null;
   }
 }
