@@ -41,7 +41,7 @@ export class AuthService {
   async signUp(credentials: SignUpCredentials): Promise<AuthResponse> {
     try {
       const response = await api.post<AuthResponse>(
-        '/api/v1/auth/signup',
+        '/auth/signup',
         {
           email: credentials.email,
           password: credentials.password,
@@ -77,7 +77,7 @@ export class AuthService {
   async signIn(credentials: SignInCredentials): Promise<AuthResponse> {
     try {
       const response = await api.post<AuthResponse>(
-        '/api/v1/auth/signin',
+        '/auth/signin',
         {
           email: credentials.email,
           password: credentials.password,
@@ -137,7 +137,7 @@ export class AuthService {
       
       if (session) {
         // Call backend signout endpoint
-        await api.post<SimpleResponse>('/api/v1/auth/signout');
+        await api.post<SimpleResponse>('/auth/signout');
       }
 
       this.clearSession();
@@ -190,7 +190,7 @@ export class AuthService {
         return null;
       }
 
-      const response = await api.get<AuthResponse>('/api/v1/auth/user');
+      const response = await api.get<AuthResponse>('/auth/user');
 
       if (!response.success || !response.data || !response.data.user) {
         return null;
@@ -221,7 +221,7 @@ export class AuthService {
       }
 
       const response = await api.post<AuthResponse>(
-        '/api/v1/auth/refresh',
+        '/auth/refresh',
         {
           refresh_token: storedSession.refresh_token,
         }
@@ -265,7 +265,7 @@ export class AuthService {
   async updateProfile(updates: UpdateProfileRequest): Promise<AuthResponse> {
     try {
       const response = await api.put<AuthResponse>(
-        '/api/v1/auth/profile',
+        '/auth/profile',
         updates
       );
 
@@ -297,7 +297,7 @@ export class AuthService {
   async verifyEmailOTP(email: string, token: string): Promise<AuthResponse> {
     try {
       const response = await api.post<AuthResponse>(
-        '/api/v1/auth/verify-otp',
+        '/auth/verify-otp',
         {
           email,
           token,
@@ -340,7 +340,7 @@ export class AuthService {
   async resendVerificationOTP(email: string): Promise<{ success: boolean; error?: string }> {
     try {
       const response = await api.post<SimpleResponse>(
-        '/api/v1/auth/resend-otp',
+        '/auth/resend-otp',
         { email }
       );
 
@@ -369,7 +369,7 @@ export class AuthService {
   async sendPasswordResetOTP(email: string): Promise<{ success: boolean; error?: string }> {
     try {
       const response = await api.post<SimpleResponse>(
-        '/api/v1/auth/password-reset',
+        '/auth/password-reset',
         { email }
       );
 
@@ -402,7 +402,7 @@ export class AuthService {
   ): Promise<AuthResponse> {
     try {
       const response = await api.post<AuthResponse>(
-        '/api/v1/auth/password-reset/verify',
+        '/auth/password-reset/verify',
         {
           email,
           token,

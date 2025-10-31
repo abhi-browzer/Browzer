@@ -112,52 +112,6 @@ export const api = {
 };
 
 /**
- * Auth-specific API endpoints
- * Convenience wrapper for authentication operations
- */
-export const authApi = {
-  signUp: (email: string, password: string, display_name?: string) => {
-    return api.post('/api/v1/auth/signup', { email, password, display_name });
-  },
-
-  signIn: (email: string, password: string) => {
-    return api.post('/api/v1/auth/signin', { email, password });
-  },
-
-  signOut: () => {
-    return api.post('/api/v1/auth/signout');
-  },
-
-  refreshSession: (refresh_token: string) => {
-    return api.post('/api/v1/auth/refresh', { refresh_token });
-  },
-
-  getCurrentUser: () => {
-    return api.get('/api/v1/auth/user');
-  },
-
-  updateProfile: (display_name?: string, photo_url?: string) => {
-    return api.put('/api/v1/auth/profile', { display_name, photo_url });
-  },
-
-  verifyOTP: (email: string, token: string) => {
-    return api.post('/api/v1/auth/verify-otp', { email, token });
-  },
-
-  resendOTP: (email: string) => {
-    return api.post('/api/v1/auth/resend-otp', { email });
-  },
-
-  requestPasswordReset: (email: string) => {
-    return api.post('/api/v1/auth/password-reset', { email });
-  },
-
-  verifyPasswordReset: (email: string, token: string, new_password: string) => {
-    return api.post('/api/v1/auth/password-reset/verify', { email, token, new_password });
-  },
-};
-
-/**
  * Connection-specific API endpoints
  */
 export const connectionApi = {

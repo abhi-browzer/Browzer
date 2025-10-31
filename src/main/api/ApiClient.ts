@@ -129,7 +129,7 @@ export class ApiClient {
     sse_url: string;
   }>> {
     try {
-      const response = await this.axios.post('/api/v1/connection/establish', {
+      const response = await this.axios.post('/connection/establish', {
         electron_version: app.getVersion(),
         os_platform: os.platform(),
         machine_id: os.hostname(),
@@ -158,7 +158,7 @@ export class ApiClient {
     server_time: string;
   }>> {
     try {
-      const response = await this.axios.get('/api/v1/connection/health');
+      const response = await this.axios.get('/connection/health');
       return {
         success: true,
         data: response.data,
@@ -174,7 +174,7 @@ export class ApiClient {
    */
   async disconnect(): Promise<ApiResponse> {
     try {
-      const response = await this.axios.post('/api/v1/connection/disconnect');
+      const response = await this.axios.post('/connection/disconnect');
       this.sessionToken = null;
       console.log('[ApiClient] Disconnected successfully');
       
