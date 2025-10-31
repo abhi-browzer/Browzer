@@ -10,24 +10,20 @@ import {
   SimpleResponse,
 } from '@/shared/types';
 import { BrowserManager } from '@/main/BrowserManager';
-import { ConnectionManager } from '@/main/api/ConnectionManager';
 import { api } from '@/main/api';
 
 export class AuthService {
   private sessionStore: Store;
   private refreshTimer: NodeJS.Timeout | null = null;
   private authWindow: BrowserWindow | null = null;
-  private connectionManager: ConnectionManager;
   private readonly browserManager: BrowserManager;
 
   
 
   constructor(
     browserManager: BrowserManager,
-    connectionManager: ConnectionManager
   ) {
     this.browserManager = browserManager;
-    this.connectionManager = connectionManager;
 
     // Initialize secure session storage
     this.sessionStore = new Store({

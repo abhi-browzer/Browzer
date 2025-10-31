@@ -22,11 +22,10 @@ export class IPCHandlers {
     private browserManager: BrowserManager,
     private layoutManager: LayoutManager,
     private windowManager: WindowManager,
-    private connectionManager: ConnectionManager
   ) {
     this.settingsStore = new SettingsStore();
     this.passwordManager = this.browserManager.getPasswordManager();
-    this.authService = new AuthService(this.browserManager, this.connectionManager);
+    this.authService = new AuthService(this.browserManager);
     this.setupHandlers();
   }
 

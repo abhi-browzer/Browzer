@@ -36,13 +36,13 @@ export class BrowserWindow {
     };
     
     this.connectionManager = new ConnectionManager(connectionConfig);
+    this.connectionManager.initialize();
 
     // 4. Setup IPC communication
     this.ipcHandlers = new IPCHandlers(
       this.browserManager,
       this.layoutManager,
-      this.windowManager,
-      this.connectionManager
+      this.windowManager
     );
 
     // 4. Initialize deep link service
