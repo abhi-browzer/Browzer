@@ -45,6 +45,7 @@ export class IPCHandlers {
     this.setupAutomationHandlers();
     this.setupAuthHandlers();
     this.setupSubscriptionHandlers();
+    this.setupShellHandlers();
     this.setupDeepLinkHandlers();
   }
 
@@ -395,6 +396,12 @@ export class IPCHandlers {
 
     ipcMain.handle('subscription:get-credits-remaining', async () => {
       return this.subscriptionService.getCreditsRemaining();
+    });
+  }
+
+  private setupShellHandlers(): void {
+    ipcMain.handle('shell:open-external', async (_, url: string) => {
+      await shell.openExternal(url);
     });
   }
 

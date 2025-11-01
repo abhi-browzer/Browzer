@@ -164,6 +164,9 @@ export interface SubscriptionAPI {
   useCredits: (creditsToUse: number) => Promise<CreditUsageResponse>;
   hasCredits: (creditsNeeded: number) => Promise<boolean>;
   getCreditsRemaining: () => Promise<number>;
+  
+  // Utility
+  openExternal: (url: string) => Promise<void>;
 }
 
 const browserAPI: BrowserAPI = {
@@ -380,6 +383,7 @@ const subscriptionAPI: SubscriptionAPI = {
   useCredits: (creditsToUse: number) => ipcRenderer.invoke('subscription:use-credits', creditsToUse),
   hasCredits: (creditsNeeded: number) => ipcRenderer.invoke('subscription:has-credits', creditsNeeded),
   getCreditsRemaining: () => ipcRenderer.invoke('subscription:get-credits-remaining'),
+  openExternal: (url: string) => ipcRenderer.invoke('shell:open-external', url),
 };
 
 contextBridge.exposeInMainWorld('browserAPI', browserAPI);

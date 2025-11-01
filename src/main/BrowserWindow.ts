@@ -58,6 +58,11 @@ export class BrowserWindow {
 
     // 7. Initial layout
     this.updateLayout();
+
+    // 6. Listen for window resize
+    baseWindow.on('resize', () => {
+      this.updateLayout();
+    });
   }
 
   /**

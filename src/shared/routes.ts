@@ -26,6 +26,16 @@ export const AUTH_ROUTES: Record<string, RouteConfig> = {
     title: 'Reset Password',
     showInTab: false,
   },
+  'subscription/success': {
+    path: '/subscription/success',
+    title: 'Subscription Success',
+    showInTab: false,
+  },
+  'subscription/cancel': {
+    path: '/subscription/cancel',
+    title: 'Checkout Cancelled',
+    showInTab: false,
+  },
 };
 
 /**
@@ -55,6 +65,11 @@ export const INTERNAL_ROUTES: Record<string, RouteConfig> = {
   profile: {
     path: '/profile',
     title: 'Profile',
+    showInTab: true,
+  },
+  subscription: {
+    path: '/subscription',
+    title: 'Subscription',
     showInTab: true,
   },
 };
