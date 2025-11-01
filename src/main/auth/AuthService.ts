@@ -18,8 +18,6 @@ export class AuthService {
   private authWindow: BrowserWindow | null = null;
   private readonly browserManager: BrowserManager;
 
-  
-
   constructor(
     browserManager: BrowserManager,
   ) {
@@ -454,7 +452,7 @@ export class AuthService {
   private getStoredSession(): AuthSession | null {
     try {
       const session = this.sessionStore.get('session') as AuthSession | undefined;
-      return session || null;
+      return session ?? null;
     } catch (error) {
       console.error('Error getting stored session:', error);
       return null;
@@ -489,7 +487,7 @@ export class AuthService {
   /**
    * Clear session from storage
    */
-  private clearSession(): void {
+  public clearSession(): void {
     this.sessionStore.delete('session');
   }
 
@@ -519,6 +517,14 @@ export class AuthService {
       clearTimeout(this.refreshTimer);
       this.refreshTimer = null;
     }
+  }
+
+  /**
+   * Get current access token
+   */
+  getAccessToken(): string | null {
+    const session = this.getStoredSession();
+    return session?.access_token ?? null;
   }
 
   /**

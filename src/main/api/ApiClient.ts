@@ -1,14 +1,3 @@
-/**
- * Secure API Client for communicating with FastAPI backend
- * 
- * Features:
- * - Axios-based HTTP client
- * - Automatic retry with exponential backoff
- * - Request/response interceptors
- * - API key authentication
- * - Session token management
- * - Centralized configuration
- */
 
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosError } from 'axios';
 import { app } from 'electron';
@@ -20,6 +9,8 @@ export interface ApiConfig {
   apiKey: string;
   timeout?: number;
   retryAttempts?: number;
+  getAccessToken: () => string | null;
+  clearSession: () => void;
 }
 
 export interface ApiResponse<T = any> {
@@ -33,13 +24,20 @@ export class ApiClient {
   private axios: AxiosInstance;
   private apiKey: string;
   private retryAttempts: number;
-  private sessionToken: string | null = null;
   private electronId: string;
+
+  private getAccessToken: () => string | null;
+  private clearSession: () => void;
+  
 
   constructor(config: ApiConfig) {
     this.apiKey = config.apiKey;
-    this.retryAttempts = config.retryAttempts || 3;
+    this.retryAttempts = config.retryAttempts || 2;
     this.electronId = this.generateElectronId();
+
+    this.getAccessToken = config.getAccessToken;
+    this.clearSession = config.clearSession;
+    
 
     // Create axios instance with base configuration
     this.axios = axios.create({
@@ -75,9 +73,9 @@ export class ApiClient {
         config.headers['X-API-Key'] = this.apiKey;
         config.headers['X-Electron-ID'] = this.electronId;
 
-        // Add session token if available
-        if (this.sessionToken) {
-          config.headers['Authorization'] = `Bearer ${this.sessionToken}`;
+        const accessToken = this.getAccessToken();
+        if (accessToken) {
+          config.headers['Authorization'] = `Bearer ${accessToken}`;
         }
 
         return config;
@@ -95,9 +93,9 @@ export class ApiClient {
       async (error: AxiosError) => {
         const config = error.config as AxiosRequestConfig & { _retry?: number };
 
-        // Handle 401 - Clear session token
         if (error.response?.status === 401) {
-          this.sessionToken = null;
+          console.warn('[ApiClient] 401 Unauthorized - access token may be expired');
+          this.clearSession();
         }
 
         // Retry logic
@@ -122,23 +120,19 @@ export class ApiClient {
 
   /**
    * Establish connection with backend
+   * Note: This only verifies Electron app instance, not user authentication
    */
   async connect(): Promise<ApiResponse<{
-    session_token: string;
-    server_version: string;
     sse_url: string;
+    message: string;
   }>> {
     try {
       const response = await this.axios.post('/connection/establish', {
         electron_version: app.getVersion(),
         os_platform: os.platform(),
-        machine_id: os.hostname(),
       });
 
-      if (response.data.session_token) {
-        this.sessionToken = response.data.session_token;
-        console.log('[ApiClient] Connection established successfully');
-      }
+      console.log('[ApiClient] Electron app connection established successfully');
 
       return {
         success: true,
@@ -175,7 +169,7 @@ export class ApiClient {
   async disconnect(): Promise<ApiResponse> {
     try {
       const response = await this.axios.post('/connection/disconnect');
-      this.sessionToken = null;
+      this.clearSession();
       console.log('[ApiClient] Disconnected successfully');
       
       return {
@@ -299,19 +293,6 @@ export class ApiClient {
     }
   }
 
-  /**
-   * Set session token manually (useful for auth flow)
-   */
-  setSessionToken(token: string | null): void {
-    this.sessionToken = token;
-  }
-
-  /**
-   * Get session token
-   */
-  getSessionToken(): string | null {
-    return this.sessionToken;
-  }
 
   /**
    * Get Electron instance ID
@@ -321,10 +302,10 @@ export class ApiClient {
   }
 
   /**
-   * Check if connected (has session token)
+   * Check if user is authenticated (has access token)
    */
-  isConnected(): boolean {
-    return this.sessionToken !== null;
+  isAuthenticated(): boolean {
+    return this.getAccessToken() !== null;
   }
 
   /**

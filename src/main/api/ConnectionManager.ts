@@ -16,7 +16,8 @@ import { EventEmitter } from 'events';
 export interface ConnectionManagerConfig {
   apiBaseURL: string;
   apiKey: string;
-  healthCheckInterval?: number;
+  getAccessToken: () => string | null;
+  clearSession: () => void;
 }
 
 export enum ConnectionStatus {
@@ -32,19 +33,25 @@ export class ConnectionManager extends EventEmitter {
   private status: ConnectionStatus = ConnectionStatus.DISCONNECTED;
   private healthCheckInterval: number;
   private healthCheckTimer: NodeJS.Timeout | null = null;
+  private getAccessToken: () => string | null;
+  private clearSession: () => void;
 
   constructor(config: ConnectionManagerConfig) {
     super();
+    
+    this.getAccessToken = config.getAccessToken;
+    this.clearSession = config.clearSession;
     
     const apiConfig: ApiConfig = {
       baseURL: config.apiBaseURL,
       apiKey: config.apiKey,
       timeout: 30000,
       retryAttempts: 3,
+      getAccessToken: this.getAccessToken,
+      clearSession: this.clearSession,
     };
 
     this.apiClient = new ApiClient(apiConfig);
-    this.healthCheckInterval = config.healthCheckInterval ?? 300000; // 5 minutes
     
     // Initialize global api instance
     initializeApi(this.apiClient);
@@ -71,21 +78,18 @@ export class ConnectionManager extends EventEmitter {
         throw new Error(response.error || 'Failed to establish connection');
       }
 
-      const { session_token, sse_url, server_version } = response.data;
-      console.log(`[ConnectionManager] Connected to server v${server_version}`);
+      const { sse_url } = response.data;
+      console.log('[ConnectionManager] Electron app verified with backend');
 
       // Step 2: Initialize SSE connection
       if (sse_url) {
         console.log('[ConnectionManager] Initializing SSE...');
-        await this.initializeSSE(sse_url, session_token);
+        await this.initializeSSE(sse_url);
       }
 
       this.status = ConnectionStatus.CONNECTED;
       this.emit('status', this.status);
       this.emit('connected');
-
-      // Start health monitoring
-      this.startHealthCheck();
 
       return true;
 
@@ -101,12 +105,12 @@ export class ConnectionManager extends EventEmitter {
   /**
    * Initialize SSE connection
    */
-  private async initializeSSE(url: string, token: string): Promise<void> {
+  private async initializeSSE(url: string): Promise<void> {
     const sseConfig: SSEConfig = {
       url,
-      token,
       electronId: this.apiClient.getElectronId(),
       apiKey: this.apiClient['apiKey'], // Access private field
+      getAccessToken: this.getAccessToken,
       reconnectInterval: 5000,
       maxReconnectAttempts: 10,
       heartbeatTimeout: 60000,
@@ -166,9 +170,6 @@ export class ConnectionManager extends EventEmitter {
   async disconnect(): Promise<void> {
     console.log('[ConnectionManager] Disconnecting...');
 
-    // Stop health check
-    this.stopHealthCheck();
-
     // Disconnect SSE
     if (this.sseClient) {
       this.sseClient.disconnect();
@@ -183,36 +184,6 @@ export class ConnectionManager extends EventEmitter {
     this.emit('disconnected');
   }
 
-  /**
-   * Start periodic health checks
-   */
-  private startHealthCheck(): void {
-    this.healthCheckTimer = setInterval(async () => {
-      try {
-        const response = await this.apiClient.healthCheck();
-        
-        if (!response.success) {
-          console.warn('[ConnectionManager] Health check failed:', response.error);
-          this.emit('health:unhealthy', response.error);
-        } else {
-          this.emit('health:healthy', response.data);
-        }
-      } catch (error) {
-        console.error('[ConnectionManager] Health check error:', error);
-        this.emit('health:error', error);
-      }
-    }, this.healthCheckInterval);
-  }
-
-  /**
-   * Stop health checks
-   */
-  private stopHealthCheck(): void {
-    if (this.healthCheckTimer) {
-      clearInterval(this.healthCheckTimer);
-      this.healthCheckTimer = null;
-    }
-  }
 
   /**
    * Get API client

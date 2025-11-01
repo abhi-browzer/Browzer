@@ -7,7 +7,6 @@ import { SettingsStore } from '@/main/settings/SettingsStore';
 import { PasswordManager } from '@/main/password/PasswordManager';
 import { AuthService } from '@/main/auth';
 import { RecordedAction, HistoryQuery, AppSettings, SignUpCredentials, SignInCredentials, UpdateProfileRequest } from '@/shared/types';
-import { ConnectionManager } from '../api';
 
 /**
  * IPCHandlers - Centralized IPC communication setup
@@ -22,10 +21,11 @@ export class IPCHandlers {
     private browserManager: BrowserManager,
     private layoutManager: LayoutManager,
     private windowManager: WindowManager,
+    authService: AuthService,
   ) {
     this.settingsStore = new SettingsStore();
     this.passwordManager = this.browserManager.getPasswordManager();
-    this.authService = new AuthService(this.browserManager);
+    this.authService = authService;
     this.setupHandlers();
   }
 

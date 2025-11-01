@@ -15,9 +15,9 @@ import { EventSource } from 'eventsource';
 
 export interface SSEConfig {
   url: string;
-  token: string;
   electronId: string;
   apiKey: string;
+  getAccessToken: () => string | null;
   reconnectInterval?: number;
   maxReconnectAttempts?: number;
   heartbeatTimeout?: number;
@@ -34,9 +34,9 @@ export enum SSEConnectionState {
 export class SSEClient extends EventEmitter {
   private eventSource: EventSource | null = null;
   private url: string;
-  private token: string;
   private electronId: string;
   private apiKey: string;
+  private getAccessToken: () => string | null;
   private reconnectInterval: number;
   private maxReconnectAttempts: number;
   private heartbeatTimeout: number;
@@ -50,9 +50,9 @@ export class SSEClient extends EventEmitter {
   constructor(config: SSEConfig) {
     super();
     this.url = config.url;
-    this.token = config.token;
     this.electronId = config.electronId;
     this.apiKey = config.apiKey;
+    this.getAccessToken = config.getAccessToken || (() => null);
     this.reconnectInterval = config.reconnectInterval || 5000;
     this.maxReconnectAttempts = config.maxReconnectAttempts || 5;
     this.heartbeatTimeout = config.heartbeatTimeout || 60000; // 60 seconds
@@ -72,17 +72,27 @@ export class SSEClient extends EventEmitter {
 
     try {
       // Build SSE URL with authentication
-      const sseUrl = `${this.url}?token=${encodeURIComponent(this.token)}&electron_id=${encodeURIComponent(this.electronId)}`;
+      const sseUrl = `${this.url}?electron_id=${encodeURIComponent(this.electronId)}`;
 
       // Create EventSource with custom fetch for headers (eventsource v4.x pattern)
+      const headers: Record<string, string> = {
+        'X-API-Key': this.apiKey,
+        'X-Electron-ID': this.electronId,
+      };
+      
+      // Add access token if available (fetched dynamically)
+      const accessToken = this.getAccessToken();
+      if (accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`;
+      }
+      
       this.eventSource = new EventSource(sseUrl, {
         fetch: (input, init) => {
           return fetch(input, {
             ...init,
             headers: {
               ...init?.headers,
-              'X-API-Key': this.apiKey,
-              'X-Electron-ID': this.electronId
+              ...headers,
             }
           });
         }

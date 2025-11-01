@@ -4,12 +4,14 @@ import { LayoutManager } from '@/main/window/LayoutManager';
 import { IPCHandlers } from '@/main/ipc/IPCHandlers';
 import { DeepLinkService } from '@/main/deeplink/DeepLinkService';
 import { ConnectionManager, ConnectionManagerConfig } from './api';
+import { AuthService } from '@/main/auth/AuthService';
 
 export class BrowserWindow {
   private windowManager: WindowManager;
   private layoutManager: LayoutManager;
   private browserManager: BrowserManager;
   private connectionManager: ConnectionManager;
+  private authService: AuthService;
   private ipcHandlers: IPCHandlers;
   private deepLinkService: DeepLinkService;
 
@@ -28,34 +30,34 @@ export class BrowserWindow {
     // 2. Initialize browser manager (tabs + recording)
     this.browserManager = new BrowserManager(baseWindow, browserUIView);
 
-    // 3. Initialize connection manager
+    // 3. Initialize AuthService
+    this.authService = new AuthService(this.browserManager);
+
+    // 4. Initialize connection manager callbacks
     const connectionConfig: ConnectionManagerConfig = {
       apiBaseURL: process.env.BACKEND_API_URL || 'http://localhost:8080',
       apiKey: process.env.BACKEND_API_KEY || '',
-      healthCheckInterval: 60000, // 1 minute
+      getAccessToken: () => this.authService.getAccessToken(),
+      clearSession: () => this.authService.clearSession(),
     };
     
     this.connectionManager = new ConnectionManager(connectionConfig);
     this.connectionManager.initialize();
 
-    // 4. Setup IPC communication
+    // 5. Setup IPC communication
     this.ipcHandlers = new IPCHandlers(
       this.browserManager,
       this.layoutManager,
-      this.windowManager
+      this.windowManager,
+      this.authService
     );
 
-    // 4. Initialize deep link service
+    // 6. Initialize deep link service
     this.deepLinkService = DeepLinkService.getInstance();
     this.deepLinkService.setWindow(baseWindow, browserUIView.webContents);
 
-    // 5. Initial layout
+    // 7. Initial layout
     this.updateLayout();
-
-    // 6. Listen for window resize
-    baseWindow.on('resize', () => {
-      this.updateLayout();
-    });
   }
 
   /**
