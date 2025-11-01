@@ -6,7 +6,9 @@ import { WindowManager } from '@/main/window/WindowManager';
 import { SettingsStore } from '@/main/settings/SettingsStore';
 import { PasswordManager } from '@/main/password/PasswordManager';
 import { AuthService } from '@/main/auth';
+import { SubscriptionService } from '@/main/subscription/SubscriptionService';
 import { RecordedAction, HistoryQuery, AppSettings, SignUpCredentials, SignInCredentials, UpdateProfileRequest } from '@/shared/types';
+import { CheckoutSessionRequest, PortalSessionRequest } from '@/shared/types/subscription';
 
 /**
  * IPCHandlers - Centralized IPC communication setup
@@ -16,6 +18,7 @@ export class IPCHandlers {
   private settingsStore: SettingsStore;
   private passwordManager: PasswordManager;
   private authService: AuthService;
+  private subscriptionService: SubscriptionService;
 
   constructor(
     private browserManager: BrowserManager,
@@ -26,6 +29,7 @@ export class IPCHandlers {
     this.settingsStore = new SettingsStore();
     this.passwordManager = this.browserManager.getPasswordManager();
     this.authService = authService;
+    this.subscriptionService = new SubscriptionService();
     this.setupHandlers();
   }
 
@@ -40,6 +44,7 @@ export class IPCHandlers {
     this.setupWindowHandlers();
     this.setupAutomationHandlers();
     this.setupAuthHandlers();
+    this.setupSubscriptionHandlers();
     this.setupDeepLinkHandlers();
   }
 
@@ -105,47 +110,30 @@ export class IPCHandlers {
   }
 
   private setupRecordingHandlers(): void {
-    // Start recording
     ipcMain.handle('browser:start-recording', async () => {
       return this.browserManager.startRecording();
     });
-
-    // Stop recording - returns actions
     ipcMain.handle('browser:stop-recording', async () => {
       return this.browserManager.stopRecording();
     });
-
-    // Save recording
     ipcMain.handle('browser:save-recording', async (_, name: string, description: string, actions: RecordedAction[]) => {
       return this.browserManager.saveRecording(name, description, actions);
     });
-
-    // Get all recordings
     ipcMain.handle('browser:get-all-recordings', async () => {
       return this.browserManager.getRecordingStore().getAllRecordings();
     });
-
-    // Delete recording
     ipcMain.handle('browser:delete-recording', async (_, id: string) => {
       return this.browserManager.deleteRecording(id);
     });
-
-    // Check if recording is active
     ipcMain.handle('browser:is-recording', async () => {
       return this.browserManager.isRecordingActive();
     });
-
-    // Get recorded actions
     ipcMain.handle('browser:get-recorded-actions', async () => {
       return this.browserManager.getRecordedActions();
     });
-
-    // Export recording as JSON
     ipcMain.handle('browser:export-recording', async (_, id: string) => {
       return await this.browserManager.getRecordingStore().exportRecording(id);
     });
-    
-    // Video file operations
     ipcMain.handle('video:open-file', async (_, videoPath: string) => {
       try {
         await shell.openPath(videoPath);
@@ -157,7 +145,6 @@ export class IPCHandlers {
     
     ipcMain.handle('video:get-file-url', async (_, videoPath: string) => {
       try {
-        // Use custom protocol that Electron can serve
         return `video-file://${encodeURIComponent(videoPath)}`;
       } catch (error) {
         console.error('Failed to get video file URL:', error);
@@ -286,33 +273,22 @@ export class IPCHandlers {
   }
 
    private setupPasswordHandlers(): void {
-    // Save password
     ipcMain.handle('password:save', async (_, origin: string, username: string, password: string) => {
       return this.passwordManager.saveCredential(origin, username, password);
     });
-
-    // Get credentials for origin
     ipcMain.handle('password:get-for-origin', async (_, origin: string) => {
       return this.passwordManager.getCredentialsForOrigin(origin);
     });
-
-    // Get decrypted password
     ipcMain.handle('password:get-password', async (_, credentialId: string) => {
       return this.passwordManager.getPassword(credentialId);
     });
-
-    // Delete credential
     ipcMain.handle('password:delete', async (_, credentialId: string) => {
       return this.passwordManager.deleteCredential(credentialId);
     });
-
-    // Add to blacklist
     ipcMain.handle('password:add-to-blacklist', async (_, origin: string) => {
       this.passwordManager.addToBlacklist(origin);
       return true;
     });
-
-    // Check if blacklisted
     ipcMain.handle('password:is-blacklisted', async (_, origin: string) => {
       return this.passwordManager.isBlacklisted(origin);
     });
@@ -325,8 +301,6 @@ export class IPCHandlers {
     ipcMain.handle('automation:execute-llm', async (_, userGoal: string, recordedSessionId: string) => {
      return await this.browserManager.executeIterativeAutomation(userGoal, recordedSessionId);
     });
-    
-    // Session management handlers
     ipcMain.handle('automation:load-session', async (_, sessionId: string) => {
       return await this.browserManager.loadAutomationSession(sessionId);
     });
@@ -353,81 +327,86 @@ export class IPCHandlers {
   }
 
   private setupAuthHandlers(): void {
-    // Sign up
     ipcMain.handle('auth:sign-up', async (_, credentials: SignUpCredentials) => {
       return this.authService.signUp(credentials);
     });
-
-    // Sign in
     ipcMain.handle('auth:sign-in', async (_, credentials: SignInCredentials) => {
       return this.authService.signIn(credentials);
     });
-
-    // Sign in with Google
     ipcMain.handle('auth:sign-in-google', async () => {
       return this.authService.signInWithGoogle();
     });
-
-    // Sign out
     ipcMain.handle('auth:sign-out', async () => {
       return this.authService.signOut();
     });
-
-    // Get current session
     ipcMain.handle('auth:get-session', async () => {
       return this.authService.getCurrentSession();
     });
-
-    // Get current user
     ipcMain.handle('auth:get-user', async () => {
       return this.authService.getCurrentUser();
     });
-
-    // Refresh session
     ipcMain.handle('auth:refresh-session', async () => {
       return this.authService.refreshSession();
     });
-
-    // Update profile
     ipcMain.handle('auth:update-profile', async (_, updates: UpdateProfileRequest) => {
       return this.authService.updateProfile(updates);
     });
-
-    // Verify magic link token
     ipcMain.handle('auth:verify-token', async (_, tokenHash: string, type: string) => {
       return this.authService.verifyToken(tokenHash, type);
     });
-
-    // Resend confirmation email
     ipcMain.handle('auth:resend-confirmation', async (_, email: string) => {
       return this.authService.resendConfirmation(email);
     });
-
-    // Send password reset magic link
     ipcMain.handle('auth:send-password-reset', async (_, email: string) => {
       return this.authService.sendPasswordReset(email);
     });
-
-    // Update password after magic link verification
     ipcMain.handle('auth:update-password', async (_, newPassword: string, accessToken: string) => {
       return this.authService.updatePassword(newPassword, accessToken);
     });
   }
 
+  private setupSubscriptionHandlers(): void {
+    ipcMain.handle('subscription:get-plans', async () => {
+      return this.subscriptionService.getPlans();
+    });
+
+    ipcMain.handle('subscription:get-current', async () => {
+      return this.subscriptionService.getCurrentSubscription();
+    });
+
+    ipcMain.handle('subscription:create-checkout', async (_, request: CheckoutSessionRequest) => {
+      return this.subscriptionService.createCheckoutSession(request);
+    });
+
+    ipcMain.handle('subscription:create-portal', async (_, request: PortalSessionRequest) => {
+      return this.subscriptionService.createPortalSession(request);
+    });
+
+    ipcMain.handle('subscription:use-credits', async (_, creditsToUse: number) => {
+      return this.subscriptionService.useCredits(creditsToUse);
+    });
+
+    ipcMain.handle('subscription:sync', async () => {
+      return this.subscriptionService.syncSubscription();
+    });
+    ipcMain.handle('subscription:has-credits', async (_, creditsNeeded: number) => {
+      return this.subscriptionService.hasCredits(creditsNeeded);
+    });
+
+    ipcMain.handle('subscription:get-credits-remaining', async () => {
+      return this.subscriptionService.getCreditsRemaining();
+    });
+  }
+
   private setupDeepLinkHandlers(): void {
-    // Hide all tabs (for fullscreen routes)
     ipcMain.handle('deeplink:hide-tabs', async () => {
       this.browserManager.hideAllTabs();
       return true;
     });
-
-    // Show all tabs (restore normal browsing)
     ipcMain.handle('deeplink:show-tabs', async () => {
       this.browserManager.showAllTabs();
       return true;
     });
-
-    // Navigate to browzer:// URL in tab
     ipcMain.handle('deeplink:navigate-tab', async (_, url: string) => {
       this.browserManager.navigateToBrowzerURL(url);
       return true;

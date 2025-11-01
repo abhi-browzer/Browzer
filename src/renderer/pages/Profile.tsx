@@ -62,15 +62,6 @@ export default function Profile() {
     }
   };
 
-  const handleSignOut = async () => {
-    try {
-      await signOut();
-      toast.success('Signed out successfully');
-    } catch (error) {
-      toast.error('Failed to sign out');
-    }
-  };
-
   const getInitials = (name: string) => {
     return name
       .split(' ')
@@ -278,25 +269,6 @@ export default function Profile() {
                 These actions cannot be undone. Please proceed with caution.
               </AlertDescription>
             </Alert>
-
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium text-slate-900 dark:text-white">
-                  Sign Out
-                </p>
-                <p className="text-sm text-slate-600 dark:text-slate-400">
-                  Sign out of your account on this device
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                onClick={handleSignOut}
-                className="border-red-200 text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950"
-              >
-                <LogOut className="h-4 w-4 mr-2" />
-                Sign Out
-              </Button>
-            </div>
 
             <Separator />
 

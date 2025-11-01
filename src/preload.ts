@@ -1,6 +1,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { contextBridge, ipcRenderer, desktopCapturer } from 'electron';
 import { HistoryEntry, HistoryQuery, HistoryStats, TabInfo, AppSettings, SignUpCredentials, SignInCredentials, AuthResponse, AuthSession, User, UpdateProfileRequest } from '@/shared/types';
+import { 
+  PlansResponse, 
+  SubscriptionResponse, 
+  CheckoutSessionRequest, 
+  CheckoutSessionResponse, 
+  PortalSessionRequest, 
+  PortalSessionResponse, 
+  CreditUsageResponse 
+} from '@/shared/types/subscription';
 
 
 export interface BrowserAPI {
@@ -141,8 +150,22 @@ export interface AuthAPI {
   updatePassword: (newPassword: string, accessToken: string) => Promise<AuthResponse>;
 }
 
-// Expose protected methods that allow the renderer process to use
-// ipcRenderer without exposing the entire object
+export interface SubscriptionAPI {
+  // Plans
+  getPlans: () => Promise<PlansResponse>;
+  
+  // Subscription Management
+  getCurrentSubscription: () => Promise<SubscriptionResponse>;
+  createCheckoutSession: (request: CheckoutSessionRequest) => Promise<CheckoutSessionResponse>;
+  createPortalSession: (request: PortalSessionRequest) => Promise<PortalSessionResponse>;
+  syncSubscription: () => Promise<SubscriptionResponse>;
+  
+  // Credit Management
+  useCredits: (creditsToUse: number) => Promise<CreditUsageResponse>;
+  hasCredits: (creditsNeeded: number) => Promise<boolean>;
+  getCreditsRemaining: () => Promise<number>;
+}
+
 const browserAPI: BrowserAPI = {
   initializeBrowser: () => ipcRenderer.invoke('browser:initialize'),
   createTab: (url?: string) => ipcRenderer.invoke('browser:create-tab', url),
@@ -345,5 +368,20 @@ const authAPI: AuthAPI = {
     ipcRenderer.invoke('auth:update-password', newPassword, accessToken),
 };
 
+// Subscription API implementation
+const subscriptionAPI: SubscriptionAPI = {
+  getPlans: () => ipcRenderer.invoke('subscription:get-plans'),
+  getCurrentSubscription: () => ipcRenderer.invoke('subscription:get-current'),
+  createCheckoutSession: (request: CheckoutSessionRequest) => 
+    ipcRenderer.invoke('subscription:create-checkout', request),
+  createPortalSession: (request: PortalSessionRequest) => 
+    ipcRenderer.invoke('subscription:create-portal', request),
+  syncSubscription: () => ipcRenderer.invoke('subscription:sync'),
+  useCredits: (creditsToUse: number) => ipcRenderer.invoke('subscription:use-credits', creditsToUse),
+  hasCredits: (creditsNeeded: number) => ipcRenderer.invoke('subscription:has-credits', creditsNeeded),
+  getCreditsRemaining: () => ipcRenderer.invoke('subscription:get-credits-remaining'),
+};
+
 contextBridge.exposeInMainWorld('browserAPI', browserAPI);
 contextBridge.exposeInMainWorld('authAPI', authAPI);
+contextBridge.exposeInMainWorld('subscriptionAPI', subscriptionAPI);

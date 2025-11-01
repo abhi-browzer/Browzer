@@ -1,9 +1,10 @@
-import type { BrowserAPI, AuthAPI } from './preload';
+import type { BrowserAPI, AuthAPI, SubscriptionAPI } from './preload';
 
 declare global {
   interface Window {
     browserAPI: BrowserAPI;
     authAPI: AuthAPI;
+    subscriptionAPI: SubscriptionAPI;
   }
 
   // Vite Electron Forge globals
